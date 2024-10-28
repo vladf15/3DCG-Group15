@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+
+assignment_2/.vs/
+assignment_2/out/
