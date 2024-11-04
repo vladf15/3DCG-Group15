@@ -64,20 +64,24 @@ public:
         }
     }
 
+    void userInterface()
+    {
+        // Use ImGui for easy input/output of ints, floats, strings, etc...
+        ImGui::Begin("Window");
+//        ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
+//        ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
+        ImGui::Checkbox("Use material if no texture", &m_useMaterial);
+        ImGui::End();
+    }
+
     void update()
     {
-        int dummyInteger = 0; // Initialized to 0
         while (!m_window.shouldClose()) {
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
 
-            // Use ImGui for easy input/output of ints, floats, strings, etc...
-            ImGui::Begin("Window");
-            ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
-            ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
-            ImGui::Checkbox("Use material if no texture", &m_useMaterial);
-            ImGui::End();
+            userInterface();
 
             // Clear the screen
             glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
