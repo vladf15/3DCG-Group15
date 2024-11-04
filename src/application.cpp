@@ -51,8 +51,12 @@ public:
 
             ShaderBuilder shadowBuilder;
             shadowBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shadow_vert.glsl");
-            shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "Shaders/shadow_frag.glsl");
+            shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/shadow_frag.glsl");
             m_shadowShader = shadowBuilder.build();
+
+            ShaderBuilder pbrBuilder;
+            shadowBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shader_vert.glsl");
+            shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/pbr_frag.glsl");
 
             // Any new shaders can be added below in similar fashion.
             // ==> Don't forget to reconfigure CMake when you do!
@@ -71,6 +75,7 @@ public:
 //        ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
 //        ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
         ImGui::Checkbox("Use material if no texture", &m_useMaterial);
+        ImGui::Checkbox("Use PBR shader", &usePbrShader);
         ImGui::End();
     }
 
@@ -96,7 +101,9 @@ public:
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
             for (GPUMesh& mesh : m_meshes) {
-                m_defaultShader.bind();
+                if (usePbrShader) pbrShader.bind();
+                else m_defaultShader.bind();
+
                 glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
                 //Uncomment this line when you use the modelMatrix (or fragmentPosition)
                 //glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
@@ -109,6 +116,24 @@ public:
                 } else {
                     glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
                     glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
+                }
+                if (usePbrShader) {
+                    glUniform3fv(pbrShader.getUniformLocation("cameraPos"), 1, glm::value_ptr(cameraPos));
+
+                    float metallic = 0.3f;
+                    float roughness = 0.4f;
+                    float ambientOcclusion = 1.0f;
+                    glm::vec3 albedo { 0.5f };
+
+                    glm::vec3 lightPos { 1.0f };
+                    glm::vec3 lightColor { 1.0f };
+
+                    glUniform1f(pbrShader.getUniformLocation("metallic"), metallic);
+                    glUniform1f(pbrShader.getUniformLocation("roughness"), roughness);
+                    glUniform1f(pbrShader.getUniformLocation("ambientOcclusion"), ambientOcclusion);
+                    glUniform3fv(pbrShader.getUniformLocation("albedo"), 1, glm::value_ptr(albedo));
+                    glUniform3fv(pbrShader.getUniformLocation("lightPos"), 1, glm::value_ptr(lightPos));
+                    glUniform3fv(pbrShader.getUniformLocation("lightColor"), 1, glm::value_ptr(lightColor));
                 }
                 mesh.draw(m_defaultShader);
             }
@@ -162,14 +187,18 @@ private:
     // Shader for default rendering and for depth rendering
     Shader m_defaultShader;
     Shader m_shadowShader;
+    Shader pbrShader;
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
     bool m_useMaterial { true };
+    bool usePbrShader { false };
+
+    glm::vec3 cameraPos { -1, 1, -1 };
 
     // Projection and view matrices for you to fill in and use
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
-    glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
+    glm::mat4 m_viewMatrix = glm::lookAt(cameraPos, glm::vec3(0), glm::vec3(0, 1, 0));
     glm::mat4 m_modelMatrix { 1.0f };
 };
 
