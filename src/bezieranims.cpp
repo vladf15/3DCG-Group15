@@ -16,7 +16,7 @@ using namespace std;
 //used similar loader code as last year since it seems like the simplest way to load the bezier splines
 //I rewrote the actual functionality from scratch
 //load the bezier splines from blender exported json file
-vector<BezierSpline> loadSplines(const string& file_path) {
+vector<BezierSpline> loadSplines(const char* file_path) {
     json j;
     ifstream file(file_path);
     file >> j;
@@ -26,13 +26,13 @@ vector<BezierSpline> loadSplines(const string& file_path) {
         //control points for each spline
         for (const auto& control : splineText["control_points"]) {
             //changed coordinate system from Z axis pointingr up to Y axis pointing up
-            spline.control_points.emplace_back(glm::vec3(control[0], control[2], -1.0f * control[1]));
+            spline.control_points.emplace_back(glm::vec3(control[0], control[1], control[2]));
         }
         for (const auto& left : splineText["handles_left"]) {
-            spline.handles_right.emplace_back(glm::vec3(left[0], left[2], -1.0f * left[1]));
+            spline.handles_left.emplace_back(glm::vec3(left[0], left[1], left[2]));
         }
         for (const auto& right : splineText["handles_right"]) {
-            spline.handles_right.emplace_back(glm::vec3(right[0], right[2], -1.0f * right[1]));
+            spline.handles_right.emplace_back(glm::vec3(right[0], right[1], right[2]));
         }
         splines.emplace_back(spline);
     }
@@ -75,7 +75,7 @@ float getSegmentLength(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, i
 	glm::vec3 p_curve = p0;
 	//previous point on the curve
     glm::vec3 p_last = p0;
-    for (float i = 0; i < subdivisions; i++) {
+    for (float i = 1; i <= subdivisions; ++i) {
         float t = i / subdivisions;
 		p_curve = interpPoint(p0, p1, p2, p3, t);
 		length += glm::length(p_curve - p_last);
@@ -93,21 +93,40 @@ float getBezierLength(BezierSpline s, int subdivisions = 100) {
 	return length;
 }
 
+//get the direction of animated object at the given t
+glm::vec3 interpTangent(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t) {
+    //reference used:
+    //https://stackoverflow.com/questions/4089443/find-the-tangent-of-a-point-on-a-cubic-bezier-curve
 
-//get the point on the bezier curve at a given t between [0,1]
-glm::vec3 getPointOnCurve(BezierSpline s, float t, int subdivisions = 100) {
+    glm::vec3 tangent = glm::normalize(3 * (1 - t) * (1 - t) * (p1 - p0) + 6 * (1 - t) * t * (p2 - p1) + 3 * t * t * (p3 - p2));
+    return tangent;
+}
+
+
+//get the point on the bezier curve at a given t between [0,1] as 
+std::pair<glm::vec3, glm::vec3> getPointOnCurve(BezierSpline s, float t, int subdivisions = 100) {
 	int segments = s.control_points.size() - 1;
 	float goal_length = getBezierLength(s, subdivisions) * t;
 	float current_length = 0.0f;
 
     for (int i = 0; i < segments; i++) {
 		float segment_length = getSegmentLength(s.control_points[i], s.handles_right[i], s.handles_left[i + 1], s.control_points[i + 1], subdivisions);
-        //if the goal point is on the next segment, do interp
+		//if the goal point is on the current segment, find the point and direction
         if (current_length + segment_length >= goal_length) {
             float t_segment = (goal_length - current_length) / segment_length;
-			return interpPoint(s.control_points[i], s.handles_right[i], s.handles_left[i + 1], s.control_points[i + 1], t_segment);
+			glm::vec3 pos = interpPoint(s.control_points[i], s.handles_right[i], s.handles_left[i + 1], s.control_points[i + 1], t_segment);
+			glm::vec3 direction = interpTangent(s.control_points[i], s.handles_right[i], s.handles_left[i + 1], s.control_points[i + 1], t_segment);
+			return { pos, direction };
         }
 		current_length += segment_length;
     }
-	return s.control_points[segments];
+	return { s.control_points[segments], glm::vec3(0.0f) };
+}
+
+//convert direction to rotation matrix to update mesh orientation
+glm::mat4 getRotationMatrix(glm::vec3 direction) {
+	glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::vec3 right = glm::cross(direction, up);
+	up = glm::cross(right, direction);
+	return glm::mat4(glm::vec4(right, 0.0f), glm::vec4(up, 0.0f), glm::vec4(direction, 0.0f), glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 }

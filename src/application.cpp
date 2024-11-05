@@ -20,6 +20,9 @@ DISABLE_WARNINGS_POP()
 #include <functional>
 #include <iostream>
 #include <vector>
+#include "bezieranims.h"
+
+
 
 class Application {
 public:
@@ -81,6 +84,27 @@ public:
             // Put your real-time logic and rendering in here
             m_window.updateInput();
 
+            //animation code
+            if (inAnimation) {
+                if (animationTimer >= animationLength) {
+                    inAnimation = false;
+					animationTimer = 0.0f;
+                }
+                else {
+					std::pair<glm::vec3, glm::vec3> oldCoords = getPointOnCurve(animPath[0], animationTimer / animationLength, 100);
+                    animationTimer += 0.1f;
+					std::pair<glm::vec3, glm::vec3> newCoords = getPointOnCurve(animPath[0], animationTimer / animationLength, 100);
+					currentPos += newCoords.first - oldCoords.first;
+					currentDir += newCoords.second - oldCoords.second;
+                }
+
+                glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), currentPos);
+                glm::mat4 rotationMatrix = getRotationMatrix(currentDir);
+                m_modelMatrix = translationMatrix * rotationMatrix;
+
+            }
+            
+
             userInterface();
 
             // Clear the screen
@@ -124,6 +148,10 @@ public:
     void onKeyPressed(int key, int mods)
     {
         std::cout << "Key pressed: " << key << std::endl;
+        switch(key) {
+        case GLFW_KEY_SPACE:
+            inAnimation = true;
+        }
     }
 
     // In here you can handle key releases
@@ -171,6 +199,14 @@ private:
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
     glm::mat4 m_modelMatrix { 1.0f };
+
+    //Animation variables
+    bool inAnimation{ false };
+	float animationTimer{ 0.0f };
+	float animationLength{ 100.0f };
+	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_curve.json");
+	glm::vec3 currentPos{ 1.0f };
+    glm::vec3 currentDir{ 1.0f };
 };
 
 int main()
