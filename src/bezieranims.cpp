@@ -25,14 +25,13 @@ vector<BezierSpline> loadSplines(const char* file_path) {
         BezierSpline spline;
         //control points for each spline
         for (const auto& control : splineText["control_points"]) {
-            //changed coordinate system from Z axis pointingr up to Y axis pointing up
-            spline.control_points.emplace_back(glm::vec3(control[0], control[1], control[2]));
+            spline.control_points.emplace_back(glm::vec3(control[0], control[2], -1.0 * control[1]));
         }
         for (const auto& left : splineText["handles_left"]) {
-            spline.handles_left.emplace_back(glm::vec3(left[0], left[1], left[2]));
+            spline.handles_left.emplace_back(glm::vec3(left[0], left[2], -1.0 * left[1]));
         }
         for (const auto& right : splineText["handles_right"]) {
-            spline.handles_right.emplace_back(glm::vec3(right[0], right[1], right[2]));
+            spline.handles_right.emplace_back(glm::vec3(right[0], right[2], -1.0 * right[1]));
         }
         splines.emplace_back(spline);
     }
@@ -75,7 +74,7 @@ float getSegmentLength(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, i
 	glm::vec3 p_curve = p0;
 	//previous point on the curve
     glm::vec3 p_last = p0;
-    for (float i = 1; i <= subdivisions; ++i) {
+    for (float i = 1; i <= subdivisions; i++) {
         float t = i / subdivisions;
 		p_curve = interpPoint(p0, p1, p2, p3, t);
 		length += glm::length(p_curve - p_last);
@@ -120,13 +119,13 @@ std::pair<glm::vec3, glm::vec3> getPointOnCurve(BezierSpline s, float t, int sub
         }
 		current_length += segment_length;
     }
-	return { s.control_points[segments], glm::vec3(0.0f) };
+	return { s.control_points[segments], interpTangent(s.control_points[segments - 1], s.handles_right[segments - 1], s.handles_left[segments], s.control_points[segments], 1.0f) };
 }
 
 //convert direction to rotation matrix to update mesh orientation
 glm::mat4 getRotationMatrix(glm::vec3 direction) {
 	glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-	glm::vec3 right = glm::cross(direction, up);
-	up = glm::cross(right, direction);
+	glm::vec3 right = glm::normalize(glm::cross(direction, up));
+	up = glm::normalize(glm::cross(right, direction));
 	return glm::mat4(glm::vec4(right, 0.0f), glm::vec4(up, 0.0f), glm::vec4(direction, 0.0f), glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 }

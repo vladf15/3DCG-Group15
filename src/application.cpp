@@ -84,25 +84,71 @@ public:
             // Put your real-time logic and rendering in here
             m_window.updateInput();
 
+          
             //animation code
             if (inAnimation) {
-                if (animationTimer >= animationLength) {
+				//switch to next animation if current animation is done
+				if (animationTimer > animationLength && currentAnim < animPath.size() - 1) {
+					currentAnim++;
+					animationTimer = 0.0f;
+				}
+				//if all animations are done, stop animation
+				else if (animationTimer > animationLength) {
                     inAnimation = false;
 					animationTimer = 0.0f;
+                    currentAnim = 0.0f;
                 }
+				//if animation is still going, update position and direction
                 else {
-					std::pair<glm::vec3, glm::vec3> oldCoords = getPointOnCurve(animPath[0], animationTimer / animationLength, 100);
+                    std::pair<glm::vec3, glm::vec3> oldCoords = getPointOnCurve(animPath[currentAnim], animationTimer / animationLength, 100);
                     animationTimer += 0.1f;
-					std::pair<glm::vec3, glm::vec3> newCoords = getPointOnCurve(animPath[0], animationTimer / animationLength, 100);
-					currentPos += newCoords.first - oldCoords.first;
-					currentDir += newCoords.second - oldCoords.second;
+                    std::pair<glm::vec3, glm::vec3> newCoords = getPointOnCurve(animPath[currentAnim], animationTimer / animationLength, 100);
+                    currentPos += newCoords.first - oldCoords.first;
+                    currentDir = newCoords.second;
                 }
-
-                glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), currentPos);
-                glm::mat4 rotationMatrix = getRotationMatrix(currentDir);
-                m_modelMatrix = translationMatrix * rotationMatrix;
-
             }
+
+            glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), currentPos);
+            glm::mat4 rotationMatrix = getRotationMatrix(currentDir);
+            m_modelMatrix = translationMatrix * rotationMatrix;
+
+
+            //camera movement
+            if (viewMode == 1) {
+                glm::vec3 rightDir = glm::normalize(glm::cross(viewDir, glm::vec3(0.0f, 1.0f, 0.0f)));
+                if (moveForward) {
+                    cameraPos += cameraSpeed * viewDir * glm::vec3(1.0f, 0.0f, 1.0f);
+                }
+                if (moveBackward) {
+                    cameraPos += -cameraSpeed * viewDir * glm::vec3(1.0f, 0.0f, 1.0f);
+                }
+                if (moveLeft) {
+                    cameraPos += -cameraSpeed * rightDir * glm::vec3(1.0f, 0.0f, 1.0f);
+                }
+                if (moveRight) {
+                    cameraPos += cameraSpeed * rightDir * glm::vec3(1.0f, 0.0f, 1.0f);
+                }
+                if (moveUp) {
+                    cameraPos += cameraSpeed * glm::vec3(0.0f, 1.0f, 0.0f);
+                }
+                if (moveDown) {
+                    cameraPos += -cameraSpeed * glm::vec3(0.0f, 1.0f, 0.0f);
+                }
+                m_viewMatrix = glm::lookAt(cameraPos, cameraPos + viewDir, glm::vec3(0.0f, 1.0f, 0.0f));
+            }
+            else if (viewMode == 2) {
+                cameraPos = currentPos + glm::vec3(0.0f, 1.0f, 0.0f);
+                m_viewMatrix = glm::lookAt(cameraPos, currentPos, glm::vec3(0.0f, 0.0f, 1.0f));
+            }
+            else if (viewMode == 3) {
+                glm::vec3 rightDir = glm::normalize(glm::cross(currentDir, glm::vec3(0.0f, 1.0f, 0.0f)));
+				glm::vec3 upDir = glm::normalize(glm::cross(rightDir, currentDir));
+
+				cameraPos = currentPos - 2.0f * currentDir + 0.5f * upDir;
+				m_viewMatrix = glm::lookAt(cameraPos, currentPos, upDir);
+            }
+
+
             
 
             userInterface();
@@ -148,9 +194,37 @@ public:
     void onKeyPressed(int key, int mods)
     {
         std::cout << "Key pressed: " << key << std::endl;
-        switch(key) {
-        case GLFW_KEY_SPACE:
+        switch (key) {
+        case GLFW_KEY_Q:
             inAnimation = true;
+            break;
+        case GLFW_KEY_W:
+			moveForward = true;
+            break;
+		case GLFW_KEY_S:
+			moveBackward = true;
+			break;
+		case GLFW_KEY_A:
+			moveLeft = true;
+			break;
+		case GLFW_KEY_D:
+            moveRight = true;
+            break;
+        case GLFW_KEY_SPACE:
+			moveUp = true;
+            break;
+		case GLFW_KEY_LEFT_CONTROL:
+			moveDown = true;
+			break;
+        case GLFW_KEY_1:
+            viewMode = 1;
+			break;
+		case GLFW_KEY_2:
+			viewMode = 2;
+			break;
+		case GLFW_KEY_3:
+			viewMode = 3;
+			break;
         }
     }
 
@@ -159,7 +233,26 @@ public:
     // mods - Any modifier keys pressed, like shift or control
     void onKeyReleased(int key, int mods)
     {
-        std::cout << "Key released: " << key << std::endl;
+        switch (key) {
+        case GLFW_KEY_W:
+            moveForward = false;
+            break;
+        case GLFW_KEY_S:
+            moveBackward = false;
+            break;
+        case GLFW_KEY_A:
+            moveLeft = false;
+            break;
+        case GLFW_KEY_D:
+            moveRight = false;
+            break;
+        case GLFW_KEY_SPACE:
+            moveUp = false;
+            break;
+        case GLFW_KEY_LEFT_CONTROL:
+            moveDown = false;
+            break;
+        }
     }
 
     // If the mouse is moved this function will be called with the x, y screen-coordinates of the mouse
@@ -202,11 +295,25 @@ private:
 
     //Animation variables
     bool inAnimation{ false };
+    int currentAnim = 0;
 	float animationTimer{ 0.0f };
 	float animationLength{ 100.0f };
-	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_curve.json");
-	glm::vec3 currentPos{ 1.0f };
-    glm::vec3 currentDir{ 1.0f };
+	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_splines.json");
+	glm::vec3 currentPos{ 0.0f };
+    glm::vec3 currentDir{ 0.0f, 0.0f, 1.0f };
+
+
+    //Camera variables
+	glm::vec3 cameraPos{ -1.0f, 1.0f, -1.0f };
+	glm::vec3 viewDir{ glm::normalize(-cameraPos)};
+	int viewMode{ 1 };
+    float cameraSpeed = 0.02f;
+	bool moveForward{ false };
+	bool moveBackward{ false };
+	bool moveLeft{ false };
+	bool moveRight{ false };
+	bool moveUp{ false };
+	bool moveDown{ false };
 };
 
 int main()
