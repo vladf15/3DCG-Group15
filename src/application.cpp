@@ -49,7 +49,6 @@ public:
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
-        ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/Tiles/Tile7.obj");
         solar_system_ts = 0.0f;
         
         try {
@@ -105,7 +104,7 @@ public:
         ImGui::Begin("Window");
 //        ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
 //        ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
-        ImGui::TextWrapped("Welcome, use WASD, space and Lcontrol to move the camera. Use '1', '2' and '3' to switch between camera modes. Use the buttons to move through the scenes");
+        ImGui::TextWrapped("Welcome, use WASD, Space and Lcontrol to move the camera.\n Left click + drag to change view direction.\n Use '1', '2' and '3' to switch between camera modes.\n Use the buttons to move through the scenes");
         if(ImGui::Button("Previous Scene")) {
             if (currentScene > 0) {
                 currentScene--;
@@ -219,7 +218,7 @@ public:
                     animationTimer += 0.1f;
                     std::pair<glm::vec3, glm::vec3> newCoords = getPointOnCurve(animPath[currentAnim], animationTimer / animationLength, 100);
                     currentPos += newCoords.first - oldCoords.first;
-                    currentDir = newCoords.second;
+                    currentDir = glm::normalize(currentDir + newCoords.second - oldCoords.second);
                 }
             }
 
@@ -232,16 +231,16 @@ public:
             if (viewMode == 1) {
                 glm::vec3 rightDir = glm::normalize(glm::cross(viewDir, glm::vec3(0.0f, 1.0f, 0.0f)));
                 if (moveForward) {
-                    cameraPos += cameraSpeed * viewDir * glm::vec3(1.0f, 0.0f, 1.0f);
+                    cameraPos += cameraSpeed * glm::normalize(viewDir * glm::vec3(1.0f, 0.0f, 1.0f));
                 }
                 if (moveBackward) {
-                    cameraPos += -cameraSpeed * viewDir * glm::vec3(1.0f, 0.0f, 1.0f);
+                    cameraPos += -cameraSpeed * glm::normalize(viewDir * glm::vec3(1.0f, 0.0f, 1.0f));
                 }
                 if (moveLeft) {
-                    cameraPos += -cameraSpeed * rightDir * glm::vec3(1.0f, 0.0f, 1.0f);
+                    cameraPos += -cameraSpeed * glm::normalize(rightDir * glm::vec3(1.0f, 0.0f, 1.0f));
                 }
                 if (moveRight) {
-                    cameraPos += cameraSpeed * rightDir * glm::vec3(1.0f, 0.0f, 1.0f);
+                    cameraPos += cameraSpeed * glm::normalize(rightDir * glm::vec3(1.0f, 0.0f, 1.0f));
                 }
                 if (moveUp) {
                     cameraPos += cameraSpeed * glm::vec3(0.0f, 1.0f, 0.0f);
@@ -367,32 +366,42 @@ public:
             inAnimation = true;
             break;
         case GLFW_KEY_W:
-			moveForward = true;
+            moveForward = true;
             break;
-		case GLFW_KEY_S:
-			moveBackward = true;
-			break;
-		case GLFW_KEY_A:
-			moveLeft = true;
-			break;
-		case GLFW_KEY_D:
+        case GLFW_KEY_S:
+            moveBackward = true;
+            break;
+        case GLFW_KEY_A:
+            moveLeft = true;
+            break;
+        case GLFW_KEY_D:
             moveRight = true;
             break;
         case GLFW_KEY_SPACE:
-			moveUp = true;
+            moveUp = true;
             break;
-		case GLFW_KEY_LEFT_CONTROL:
-			moveDown = true;
-			break;
+        case GLFW_KEY_LEFT_CONTROL:
+            moveDown = true;
+            break;
         case GLFW_KEY_1:
             viewMode = 1;
-			break;
-		case GLFW_KEY_2:
-			viewMode = 2;
-			break;
-		case GLFW_KEY_3:
-			viewMode = 3;
-			break;
+            //set camera to look at object
+            cameraPos = glm::vec3(-1.0f, 1.0f, -1.0f) + currentPos;
+			viewDir = glm::normalize(currentPos - cameraPos);
+            yaw = glm::degrees(atan2(viewDir.z, viewDir.x));
+            pitch = glm::degrees(asin(viewDir.y));
+            pitch = glm::clamp(pitch, -85.0f, 85.0f);
+            viewDir.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+            viewDir.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+            viewDir.y = sin(glm::radians(pitch));
+            viewDir = glm::normalize(viewDir);
+            break;
+        case GLFW_KEY_2:
+            viewMode = 2;
+            break;
+        case GLFW_KEY_3:
+            viewMode = 3;
+            break;
         }
     }
 
@@ -426,6 +435,16 @@ public:
     // If the mouse is moved this function will be called with the x, y screen-coordinates of the mouse
     void onMouseMove(const glm::dvec2& cursorPos)
     {
+		if (mouseDrag) {
+            yaw += sensitivity * (cursorPos.x - mousePos.x);
+            pitch += sensitivity * (cursorPos.y - mousePos.y);
+            pitch = glm::clamp(pitch, -85.0f, 85.0f);
+            viewDir.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+            viewDir.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+            viewDir.y = sin(glm::radians(pitch));
+			viewDir = glm::normalize(viewDir);
+        }
+        mousePos = cursorPos;
        // std::cout << "Mouse at position: " << cursorPos.x << " " << cursorPos.y << std::endl;
     }
 
@@ -434,6 +453,8 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseClicked(int button, int mods)
     {
+        if(button == GLFW_MOUSE_BUTTON_1 && viewMode == 1)
+            mouseDrag = true;
        // std::cout << "Pressed mouse button: " << button << std::endl;
     }
 
@@ -442,6 +463,8 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseReleased(int button, int mods)
     {
+        if (button == GLFW_MOUSE_BUTTON_1)
+            mouseDrag = false;
         //std::cout << "Released mouse button: " << button << std::endl;
     }
 
@@ -467,7 +490,7 @@ private:
     int currentAnim = 0;
 	float animationTimer{ 0.0f };
 	float animationLength{ 100.0f };
-	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_splines.json");
+	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_splines.json", false);
 	glm::vec3 currentPos{ 0.0f };
     glm::vec3 currentDir{ 0.0f, 0.0f, 1.0f };
 
@@ -483,6 +506,11 @@ private:
 	bool moveRight{ false };
 	bool moveUp{ false };
 	bool moveDown{ false };
+	bool mouseDrag{ false };
+	glm::dvec2 mousePos{ 0.0, 0.0 };
+	float sensitivity = 0.75f;
+    float yaw = glm::degrees(atan2(viewDir.z, viewDir.x));
+    float pitch = glm::degrees(asin(viewDir.y));
 
     //ImGui Stuff
     bool triggered{ false };

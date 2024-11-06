@@ -7,13 +7,15 @@ struct BezierSpline {
 	std::vector<glm::vec3> handles_right;
 };
 
-std::vector<BezierSpline> loadSplines(const char* file_path);
+std::vector<BezierSpline> loadSplines(const char* file_path, bool loopAnim);
 
 glm::vec3 interpPoint(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, float t);
 
 float getSegmentLength(glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, int subdivisions);
 
 float getBezierLength(BezierSpline s, int subdivisions);
+
+glm::vec3 getPositionOnCurve(BezierSpline s, float t, int subdivisions);
 
 std::pair<glm::vec3, glm::vec3> getPointOnCurve(BezierSpline s, float t, int subdivisions);
 
