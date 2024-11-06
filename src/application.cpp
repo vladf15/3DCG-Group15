@@ -144,7 +144,7 @@ public:
                     animationTimer += 0.1f;
                     std::pair<glm::vec3, glm::vec3> newCoords = getPointOnCurve(animPath[currentAnim], animationTimer / animationLength, 100);
                     currentPos += newCoords.first - oldCoords.first;
-                    currentDir = newCoords.second;
+                    currentDir = glm::normalize(currentDir + newCoords.second - oldCoords.second);
                 }
             }
 
@@ -199,7 +199,7 @@ public:
 
             // ...
             glEnable(GL_DEPTH_TEST);
-            std::cout << "Scene: " << currentScene << std::endl;
+
             switch (currentScene) {
                 case 0:
                     const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
@@ -286,6 +286,16 @@ public:
             break;
         case GLFW_KEY_1:
             viewMode = 1;
+            //set camera to look at object
+            cameraPos = glm::vec3(-1.0f, 1.0f, -1.0f) + currentPos;
+			viewDir = glm::normalize(currentPos - cameraPos);
+            yaw = glm::degrees(atan2(viewDir.z, viewDir.x));
+            pitch = glm::degrees(asin(viewDir.y));
+            pitch = glm::clamp(pitch, -85.0f, 85.0f);
+            viewDir.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+            viewDir.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+            viewDir.y = sin(glm::radians(pitch));
+            viewDir = glm::normalize(viewDir);
             break;
         case GLFW_KEY_2:
             viewMode = 2;
@@ -344,7 +354,7 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseClicked(int button, int mods)
     {
-        if(button == GLFW_MOUSE_BUTTON_1)
+        if(button == GLFW_MOUSE_BUTTON_1 && viewMode == 1)
             mouseDrag = true;
        // std::cout << "Pressed mouse button: " << button << std::endl;
     }
@@ -381,7 +391,7 @@ private:
     int currentAnim = 0;
 	float animationTimer{ 0.0f };
 	float animationLength{ 100.0f };
-	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_splines.json");
+	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_splines.json", false);
 	glm::vec3 currentPos{ 0.0f };
     glm::vec3 currentDir{ 0.0f, 0.0f, 1.0f };
 
