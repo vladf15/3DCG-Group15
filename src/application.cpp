@@ -98,6 +98,21 @@ public:
             case 1:
                 ImGui::TextWrapped("Displaying Solar System");
                 break;
+            case 2:
+                ImGui::TextWrapped("Displaying Infinite maze");
+                break;
+            case 3:
+                ImGui::TextWrapped("Displaying Procedural Trees");
+                break;
+            case 4:
+                ImGui::TextWrapped("Displaying Procedural water surface");
+                break;
+            case 5:
+                ImGui::TextWrapped("Displaying Inverse Kinematics Animation");
+                break;
+            default:
+                ImGui::TextWrapped("Default Scene");
+                break;
         }
         ImGui::End();
     }
@@ -221,6 +236,14 @@ public:
                         glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
                         mesh.draw(m_defaultShader);
                     }
+                    break;
+                case 2:
+                    break;
+                case 3:
+                    break;
+                case 4:
+                    break;
+                case 5:
                     break;
                 default:
                     break;
