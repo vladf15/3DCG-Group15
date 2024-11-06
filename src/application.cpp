@@ -45,6 +45,7 @@ public:
         });
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
+        ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
 
         try {
             ShaderBuilder defaultBuilder;
@@ -56,6 +57,9 @@ public:
             shadowBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shadow_vert.glsl");
             shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "Shaders/shadow_frag.glsl");
             m_shadowShader = shadowBuilder.build();
+
+            ShaderBuilder ssBuilder;
+
 
             // Any new shaders can be added below in similar fashion.
             // ==> Don't forget to reconfigure CMake when you do!
@@ -73,7 +77,28 @@ public:
         ImGui::Begin("Window");
 //        ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
 //        ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
+        ImGui::TextWrapped("Welcome, use WASD, space and Lcontrol to move the camera. Use '1', '2' and '3' to switch between camera modes. Use the buttons to move through the scenes");
+        if(ImGui::Button("Previous Scene")) {
+            if (currentScene > 0) {
+                currentScene--;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Next Scene")) {
+           
+            currentScene++;
+    
+        }
         ImGui::Checkbox("Use material if no texture", &m_useMaterial);
+        ImGui::Separator();
+        switch(currentScene) {
+            case 0:
+                ImGui::TextWrapped("This is the first scene. You can use the '1', '2' and '3' keys to switch between camera modes.");
+                break;
+            case 1:
+                ImGui::TextWrapped("Displaying Solar System");
+                break;
+        }
         ImGui::End();
     }
 
@@ -159,29 +184,49 @@ public:
 
             // ...
             glEnable(GL_DEPTH_TEST);
+            std::cout << "Scene: " << currentScene << std::endl;
+            switch (currentScene) {
+                case 0:
+                    const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+                    // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+                    // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+                    const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
-            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
-            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
-            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
-
-            for (GPUMesh& mesh : m_meshes) {
-                m_defaultShader.bind();
-                glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-                //Uncomment this line when you use the modelMatrix (or fragmentPosition)
-                //glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
-                glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-                if (mesh.hasTextureCoords()) {
-                    m_texture.bind(GL_TEXTURE0);
-                    glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
-                    glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
-                    glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
-                } else {
-                    glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
-                    glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
-                }
-                mesh.draw(m_defaultShader);
+                    for (GPUMesh& mesh : m_meshes) {
+                        m_defaultShader.bind();
+                        glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                        //Uncomment this line when you use the modelMatrix (or fragmentPosition)
+                        //glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                        glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                        if (mesh.hasTextureCoords()) {
+                            m_texture.bind(GL_TEXTURE0);
+                            glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
+                            glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
+                            glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
+                        } else {
+                            glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                            glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
+                        }
+                        mesh.draw(m_defaultShader);
+                    }
+                   break;
+                case 1:
+                    const glm::mat4 mvp = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+                    const glm::mat3 nModel = glm::inverseTranspose(glm::mat3(m_modelMatrix));
+                    for(GPUMesh& mesh : ss_mesh){
+                        m_defaultShader.bind();
+                        glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
+                        glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel));
+                        glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                        glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
+                        mesh.draw(m_defaultShader);
+                    }
+                    break;
+                default:
+                    break;
             }
+
+            
 
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
@@ -258,7 +303,7 @@ public:
     // If the mouse is moved this function will be called with the x, y screen-coordinates of the mouse
     void onMouseMove(const glm::dvec2& cursorPos)
     {
-        std::cout << "Mouse at position: " << cursorPos.x << " " << cursorPos.y << std::endl;
+       // std::cout << "Mouse at position: " << cursorPos.x << " " << cursorPos.y << std::endl;
     }
 
     // If one of the mouse buttons is pressed this function will be called
@@ -266,7 +311,7 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseClicked(int button, int mods)
     {
-        std::cout << "Pressed mouse button: " << button << std::endl;
+       // std::cout << "Pressed mouse button: " << button << std::endl;
     }
 
     // If one of the mouse buttons is released this function will be called
@@ -274,7 +319,7 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseReleased(int button, int mods)
     {
-        std::cout << "Released mouse button: " << button << std::endl;
+        //std::cout << "Released mouse button: " << button << std::endl;
     }
 
 private:
@@ -283,6 +328,7 @@ private:
     // Shader for default rendering and for depth rendering
     Shader m_defaultShader;
     Shader m_shadowShader;
+
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
@@ -314,6 +360,15 @@ private:
 	bool moveRight{ false };
 	bool moveUp{ false };
 	bool moveDown{ false };
+
+    //ImGui Studd
+    bool triggered{ false };
+    int currentScene = 0;
+
+    //Solar system stuff
+    Shader solar_system;
+    std::vector<GPUMesh> ss_mesh;
+
 };
 
 int main()
