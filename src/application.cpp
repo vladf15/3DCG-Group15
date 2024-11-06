@@ -21,11 +21,14 @@ DISABLE_WARNINGS_POP()
 #include <iostream>
 #include <vector>
 #include "bezieranims.h"
-
+#include"Planet.h"
+#include"Planet.cpp"
+#include<random>
 
 
 class Application {
 public:
+
     Application()
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
@@ -46,7 +49,8 @@ public:
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
-
+        solar_system_ts = 0.0f;
+        
         try {
             ShaderBuilder defaultBuilder;
             defaultBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shader_vert.glsl");
@@ -59,6 +63,9 @@ public:
             m_shadowShader = shadowBuilder.build();
 
             ShaderBuilder ssBuilder;
+            ssBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/ss_vert.glsl");
+            ssBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/ss_frag.glsl");
+            m_solarShader = ssBuilder.build();
 
 
             // Any new shaders can be added below in similar fashion.
@@ -69,6 +76,26 @@ public:
         } catch (ShaderLoadingException e) {
             std::cerr << e.what() << std::endl;
         }
+    }
+    glm::vec3 gen_rand_clr() {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution dis(0.0f, 1.0f);
+        return glm::vec3(dis(gen), dis(gen), dis(gen));
+    }
+    void create_planet() {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> pRadiusDistr(0.4f, 0.75f);
+        std::uniform_real_distribution<> thetaInitDistr(0.0f, 2 * acos(-1.0f));
+        std::uniform_real_distribution<> phiInitDistr(0.0f, 180);
+        std::uniform_real_distribution<> spdDistr(0.5f, 2.0f);
+        float pRadius = pRadiusDistr(gen);
+        float tRadius = planets.size() + sun_size * 1.5f;
+        float t_init = thetaInitDistr(gen);
+        float p_init = phiInitDistr(gen);
+        float spd = spdDistr(gen);
+        planets.push_back(Planet(pRadius, sun_size * 1.5f, t_init, p_init, spd, gen_rand_clr()));
     }
 
     void userInterface()
@@ -96,7 +123,52 @@ public:
                 ImGui::TextWrapped("This is the first scene. You can use the '1', '2' and '3' keys to switch between camera modes.");
                 break;
             case 1:
-                ImGui::TextWrapped("Displaying Solar System");
+                ImGui::TextWrapped("Displaying Solar System. Use the options to change the parameters");
+                ImGui::SliderFloat3("Sun Position", &sun_pos.x, -10.0f, 10.0f);
+                ImGui::SliderFloat("Sun Radius", &sun_size, 0.2f, 3.0f);
+                ImGui::ColorPicker3("Sun Color", &sun_color.x);
+                ImGui::Separator();
+                if (ImGui::Button("Add Planet")) {
+                    create_planet();
+                }
+                //Code to select one planet in the list, taken from implementation in assignment 1.1 (Nicolas)
+                if (planets.size() > 0) {
+                    ImGui::Separator();
+                    std::vector<std::string> planet_names = {};
+                    std::vector<const char*> planet_list = {};
+                    int count = 0;
+                    for (const auto& plan : planets) {
+                        auto p_name = "Planet " + std::to_string(count);
+                        count++;
+                        planet_names.push_back(p_name);
+                    }
+                    for (const auto& p : planet_names) {
+                        planet_list.push_back(p.c_str());
+                    }
+                    if (selected_planet >= planet_list.size()) {
+                        selected_planet = planet_list.size() - 1;
+                    }
+                    int temp_planet_index = selected_planet;
+                    if (ImGui::ListBox("Select Planet", &temp_planet_index, planet_list.data(), planet_list.size())) {
+                        selected_planet = temp_planet_index;
+                    }
+                    ImGui::TextWrapped("Planet %i", selected_planet);
+                    ImGui::SliderFloat("Speed", &planets[selected_planet].speed, 0.0f, 3.0f);
+                    ImGui::SliderFloat("Radius", &planets[selected_planet].radius, 0.5f, 3.0f);
+                    ImGui::ColorPicker3("Planet Color", &planets[selected_planet].color.x);
+
+                    if (ImGui::Button("Remove Moon")) {
+                        planets[selected_planet].RemoveMoon();
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Create Moon")) {
+                        planets[selected_planet].CreateMoon();
+                    }
+                    if (ImGui::Button("Delete Planet")) {
+                        planets.erase(planets.begin() + selected_planet);
+                    }
+                }
+                
                 break;
             case 2:
                 ImGui::TextWrapped("Displaying Infinite maze");
@@ -116,6 +188,8 @@ public:
         }
         ImGui::End();
     }
+
+    
 
     void update()
     {
@@ -199,7 +273,6 @@ public:
 
             // ...
             glEnable(GL_DEPTH_TEST);
-            std::cout << "Scene: " << currentScene << std::endl;
             switch (currentScene) {
                 case 0:
                     const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
@@ -226,16 +299,40 @@ public:
                     }
                    break;
                 case 1:
-                    const glm::mat4 mvp = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
-                    const glm::mat3 nModel = glm::inverseTranspose(glm::mat3(m_modelMatrix));
+                    glm::mat4 sun_model = glm::mat4(1.0f);
+                    sun_model = glm::translate(sun_model, sun_pos);
+                    sun_model = glm::scale(sun_model, glm::vec3(sun_size));
+                    glm::mat4 mvp = m_projectionMatrix * m_viewMatrix * sun_model;
+                    glm::mat3 nModel = glm::inverseTranspose(glm::mat3(sun_model));
                     for(GPUMesh& mesh : ss_mesh){
-                        m_defaultShader.bind();
-                        glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
-                        glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel));
-                        glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
-                        glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
-                        mesh.draw(m_defaultShader);
+                        m_solarShader.bind();
+                        glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
+                        glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel));
+                        glUniform4f(m_solarShader.getUniformLocation("theColor"), 1.0f, 1.0f, 0.0f, 1.0f);
+                        mesh.draw_no_mat(m_solarShader);
+                        for (int i = 0; i < planets.size(); i++) {
+                            Planet p = planets[i];
+                            glm::mat4 p_model = p.GetModel(sun_model, solar_system_ts, i);
+                            mvp = m_projectionMatrix * m_viewMatrix * p_model;
+                            nModel = glm::inverseTranspose(glm::mat3(p_model));
+                            glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
+                            glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel));
+                            glUniform4f(m_solarShader.getUniformLocation("theColor"), p.color.x, p.color.y, p.color.z, 1.0f);
+                            mesh.draw_no_mat(m_solarShader);
+                            for (int j = 0; j < p.moons.size(); j++) {
+                                Moon m = p.moons[j];
+                                glm::mat4 m_model = p.GetMoonModel(p_model, solar_system_ts, j);
+                                glm::vec3 c = m.color;
+                                mvp = m_projectionMatrix * m_viewMatrix * m_model;
+                                nModel = glm::inverseTranspose(glm::mat3(m_model));
+                                glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
+                                glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel));
+                                glUniform4f(m_solarShader.getUniformLocation("theColor"), c.x, c.y, c.z, 1.0f);
+                                mesh.draw_no_mat(m_solarShader);
+                            }
+                        }
                     }
+                    solar_system_ts += 1.0f;
                     break;
                 case 2:
                     break;
@@ -384,13 +481,22 @@ private:
 	bool moveUp{ false };
 	bool moveDown{ false };
 
-    //ImGui Studd
+    //ImGui Stuff
     bool triggered{ false };
     int currentScene = 0;
 
+
+  
+
     //Solar system stuff
-    Shader solar_system;
+    Shader m_solarShader;
     std::vector<GPUMesh> ss_mesh;
+    glm::vec3 sun_pos = glm::vec3(0.0f, 0.0f, 0.0f);
+    float sun_size = 1.0f;
+    glm::vec3 sun_color = glm::vec3(1.0f, 1.0f, 0.0f);
+    float solar_system_ts = 0.0f;
+    std::vector<Planet> planets;
+    size_t selected_planet;
 
 };
 

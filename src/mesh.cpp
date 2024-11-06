@@ -98,6 +98,11 @@ void GPUMesh::draw(const Shader& drawingShader)
     glBindVertexArray(m_vao);
     glDrawElements(GL_TRIANGLES, m_numIndices, GL_UNSIGNED_INT, nullptr);
 }
+void GPUMesh::draw_no_mat(const Shader& drawingShader) {
+    // Draw the mesh's triangles
+    glBindVertexArray(m_vao);
+    glDrawElements(GL_TRIANGLES, m_numIndices, GL_UNSIGNED_INT, nullptr);
+}
 
 void GPUMesh::moveInto(GPUMesh&& other)
 {

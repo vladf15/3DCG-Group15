@@ -45,6 +45,7 @@ public:
 
     // Bind VAO and call glDrawElements.
     void draw(const Shader& drawingShader);
+    void draw_no_mat(const Shader& drawingShader);
 
 private:
     void moveInto(GPUMesh&&);
