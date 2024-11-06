@@ -49,6 +49,7 @@ public:
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
+        ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/Tiles/Tile7.obj");
         solar_system_ts = 0.0f;
         
         try {
@@ -335,6 +336,7 @@ public:
                     solar_system_ts += 1.0f;
                     break;
                 case 2:
+                    // Implementation based on wang tiles https://www.boristhebrave.com/permanent/24/06/cr31/stagecast/wang/intro.html
                     break;
                 case 3:
                     break;
