@@ -60,13 +60,14 @@ public:
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
         solar_system_ts = 0.0f;
 
-
+        ////////////////
         //PARTICLE SETUP
+        ////////////////
 		for (int i = 0; i < particle_num; i++) {
 			Particle p;
 			p.position = particleSource;
-            p.velocity = 0.01f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
-			p.life = 2.0f + 2.0f * (float)rand() / RAND_MAX;
+            p.velocity = 0.002f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
+			p.life = 2.0f + 1.0f * (float)rand() / RAND_MAX;
             p.size = 0.4f;
 			particles.push_back(p);
 		}
@@ -299,6 +300,8 @@ public:
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             // ...
+            glDepthFunc(GL_LESS);
+            glDepthMask(GL_TRUE);
             glEnable(GL_DEPTH_TEST);
             switch (currentScene) {
                 case 0:
@@ -326,17 +329,18 @@ public:
                     }
 
 					//PARTICLE RENDERING
+                    glDepthFunc(GL_LESS);
+                    glDepthMask(GL_FALSE);
                     glEnable(GL_BLEND);
                     glEnable(GL_DEPTH_TEST);
-                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-					glDepthFunc(GL_ALWAYS);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
                     for (Particle& p : particles) {
                         //animated texture on particles using a quad mesh
                         //texture taken from:
                         // https://unity.com/blog/engine-platform/free-vfx-image-sequences-flipbooks
                         glm::mat4 particleModel = glm::mat4(1.0f);
-                        particleModel = glm::scale(particleModel, glm::vec3(p.size));
                         particleModel = glm::translate(particleModel, p.position);
+                        particleModel = glm::scale(particleModel, glm::vec3(p.size));
 						glm::vec3 directionToCamera = glm::normalize(p.position - cameraPos);
 						float angle = -atan2(directionToCamera.z, directionToCamera.x);
 						//rotate the particle around y axis to face the camera
@@ -361,16 +365,19 @@ public:
                         }
 
 						p.position += p.velocity;
+						p.size = glm::clamp(0.1f + 0.3f * p.life / 1.5f, 0.0f, 0.4f);
+                        p.life -= 0.01f;
 						//randomized velocity when spawning
                         if (p.life <= 0.0f) {
                             p.position = particleSource;
-                            p.velocity = 0.01f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
-                            p.life = 2.0f + 2.0f * (float)rand() / RAND_MAX;
+                            p.velocity = 0.002f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
+                            p.life = 2.0f + 1.0f * (float)rand() / RAND_MAX;
+							p.size = 0.4f;
                         }
-                        p.life -= 0.01f;
                     }
                     glDisable(GL_BLEND);
                     glDisable(GL_DEPTH_TEST);
+                    glDepthMask(GL_TRUE);
                    break;
                 case 1:
                     glm::mat4 sun_model = glm::mat4(1.0f);
@@ -576,7 +583,7 @@ private:
     std::vector<Particle> particles;
     Texture particle_texture;
 	int particle_num = 10;
-	glm::vec3 particleSource = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::vec3 particleSource = glm::vec3(0.0f, 0.5f, 0.0f);
     //glm::mat4 particleModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.5f, 0.0f));
 
 
