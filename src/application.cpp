@@ -26,13 +26,20 @@ DISABLE_WARNINGS_POP()
 #include<random>
 
 
+struct Particle {
+    glm::vec3 position;
+    glm::vec3 velocity;
+    float life;
+    float size;
+};
+
 class Application {
 public:
 
     Application()
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
-		, anim_texture(RESOURCE_ROOT "resources/Flame02_16x4_1.png")
+		, particle_texture(RESOURCE_ROOT "resources/Flame02_16x4_1.png")
     {
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
@@ -48,10 +55,21 @@ public:
                 onMouseReleased(button, mods);
         });
 
-		anim_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/quad.obj");
+		particle_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/quad.obj");
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
         solar_system_ts = 0.0f;
+
+
+        //PARTICLE SETUP
+		for (int i = 0; i < particle_num; i++) {
+			Particle p;
+			p.position = particleSource;
+            p.velocity = 0.01f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
+			p.life = 2.0f + 2.0f * (float)rand() / RAND_MAX;
+            p.size = 0.4f;
+			particles.push_back(p);
+		}
         
         try {
             ShaderBuilder defaultBuilder;
@@ -284,24 +302,6 @@ public:
             glEnable(GL_DEPTH_TEST);
             switch (currentScene) {
                 case 0:
-                    //animated texture on a quad
-                    //texture taken from:
-                    // https://unity.com/blog/engine-platform/free-vfx-image-sequences-flipbooks
-                    const glm::mat4 quadMvp = m_projectionMatrix * m_viewMatrix * quadModelMatrix;
-                    const glm::mat3 quadNormalModelMatrix = glm::inverseTranspose(glm::mat3(quadModelMatrix));
-                    for (GPUMesh& mesh : anim_mesh) {
-                        m_animatedTextureShader.bind();
-                        glUniformMatrix4fv(m_animatedTextureShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(quadMvp));
-                        glUniformMatrix3fv(m_animatedTextureShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(quadNormalModelMatrix));
-                        anim_texture.bind(GL_TEXTURE5);
-                        glUniform1i(m_animatedTextureShader.getUniformLocation("tex"), 5);
-                        glUniform1i(m_animatedTextureShader.getUniformLocation("rows"), 4);
-                        glUniform1i(m_animatedTextureShader.getUniformLocation("columns"), 16);
-                        glUniform1f(m_animatedTextureShader.getUniformLocation("time"), glfwGetTime());
-                        glUniform1f(m_animatedTextureShader.getUniformLocation("animationSpeed"), 40.0f);
-                        mesh.draw(m_animatedTextureShader);
-                    }
-
                     const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
                     // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
                     // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
@@ -323,8 +323,54 @@ public:
                             glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
                         }
                         mesh.draw(m_defaultShader);
-                        
                     }
+
+					//PARTICLE RENDERING
+                    glEnable(GL_BLEND);
+                    glEnable(GL_DEPTH_TEST);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+					glDepthFunc(GL_ALWAYS);
+                    for (Particle& p : particles) {
+                        //animated texture on particles using a quad mesh
+                        //texture taken from:
+                        // https://unity.com/blog/engine-platform/free-vfx-image-sequences-flipbooks
+                        glm::mat4 particleModel = glm::mat4(1.0f);
+                        particleModel = glm::scale(particleModel, glm::vec3(p.size));
+                        particleModel = glm::translate(particleModel, p.position);
+						glm::vec3 directionToCamera = glm::normalize(p.position - cameraPos);
+						float angle = -atan2(directionToCamera.z, directionToCamera.x);
+						//rotate the particle around y axis to face the camera
+						const glm::mat4 particleModelMatrix = glm::rotate(particleModel, angle, glm::vec3(0.0f, 1.0f, 0.0f));
+
+                        const glm::mat4 particleMvp = m_projectionMatrix * m_viewMatrix * particleModelMatrix;
+                        const glm::mat3 particleNormalModelMatrix = glm::inverseTranspose(glm::mat3(particleModelMatrix));
+                        //fade out the particles as they despawn
+						float maxAlpha = glm::clamp(0.1f + 0.9f * p.life / 1.5f , 0.0f, 1.0f);
+                        for (GPUMesh& mesh : particle_mesh){
+                            m_animatedTextureShader.bind();
+                            glUniformMatrix4fv(m_animatedTextureShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(particleMvp));
+                            glUniformMatrix3fv(m_animatedTextureShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(particleNormalModelMatrix));
+                            particle_texture.bind(GL_TEXTURE5);
+                            glUniform1i(m_animatedTextureShader.getUniformLocation("tex"), 5);
+                            glUniform1i(m_animatedTextureShader.getUniformLocation("rows"), 4);
+                            glUniform1i(m_animatedTextureShader.getUniformLocation("columns"), 16);
+                            glUniform1f(m_animatedTextureShader.getUniformLocation("time"), glfwGetTime());
+                            glUniform1f(m_animatedTextureShader.getUniformLocation("maxAlpha"), maxAlpha);
+                            glUniform1f(m_animatedTextureShader.getUniformLocation("animationSpeed"), 40.0f);
+                            mesh.draw(m_animatedTextureShader);
+                        }
+
+						p.position += p.velocity;
+						//randomized velocity when spawning
+                        if (p.life <= 0.0f) {
+                            p.position = particleSource;
+                            p.velocity = 0.01f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
+                            p.life = 2.0f + 2.0f * (float)rand() / RAND_MAX;
+                        }
+                        p.life -= 0.01f;
+                    }
+                    glDisable(GL_BLEND);
+                    glDisable(GL_DEPTH_TEST);
                    break;
                 case 1:
                     glm::mat4 sun_model = glm::mat4(1.0f);
@@ -503,14 +549,13 @@ private:
     Shader m_defaultShader;
     Shader m_shadowShader;
 	Shader m_animatedTextureShader;
-	Texture anim_texture;
-    glm::mat4 quadModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.5f, 0.0f));
-
 
     std::vector<GPUMesh> m_meshes;
-	std::vector<GPUMesh> anim_mesh;
     Texture m_texture;
-    bool m_useMaterial { true };
+    bool m_useMaterial{ true };
+
+
+   
 
     // Projection and view matrices for you to fill in and use
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
@@ -525,6 +570,16 @@ private:
 	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_splines.json", false);
 	glm::vec3 currentPos{ 0.0f };
     glm::vec3 currentDir{ 0.0f, 0.0f, 1.0f };
+
+    //Particle variables
+    std::vector<GPUMesh> particle_mesh;
+    std::vector<Particle> particles;
+    Texture particle_texture;
+	int particle_num = 10;
+	glm::vec3 particleSource = glm::vec3(0.0f, 1.0f, 0.0f);
+    //glm::mat4 particleModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.5f, 0.0f));
+
+
 
     //Camera variables
 	glm::vec3 cameraPos{ -1.0f, 1.0f, -1.0f };

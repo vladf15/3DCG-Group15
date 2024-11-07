@@ -17,6 +17,7 @@ uniform float time;
 uniform int columns;
 uniform int rows;
 uniform float animationSpeed;
+uniform float maxAlpha;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -29,5 +30,10 @@ void main() {
 	vec2 animatedTexCoord = (texPos + fragTexCoord);
 	animatedTexCoord.x = animatedTexCoord.x / columns;
 	animatedTexCoord.y = animatedTexCoord.y / rows;
-	fragColor = vec4(texture(tex, animatedTexCoord).rgb, 1);
+	vec4 texColor = texture(tex, animatedTexCoord);
+	if (texColor.a > maxAlpha)
+	{
+		texColor.a = maxAlpha;
+	}
+	fragColor = texColor;
 }
