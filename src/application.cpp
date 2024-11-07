@@ -32,6 +32,7 @@ public:
     Application()
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
+		, anim_texture(RESOURCE_ROOT "resources/Flame02_16x4_1.png")
     {
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
@@ -47,6 +48,7 @@ public:
                 onMouseReleased(button, mods);
         });
 
+		anim_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/quad.obj");
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
         solar_system_ts = 0.0f;
@@ -61,6 +63,13 @@ public:
             shadowBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shadow_vert.glsl");
             shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "Shaders/shadow_frag.glsl");
             m_shadowShader = shadowBuilder.build();
+
+			ShaderBuilder animatedTextureBuilder;
+			animatedTextureBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/animated_texture_vert.glsl");
+			animatedTextureBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/animated_texture_frag.glsl");
+            m_animatedTextureShader = animatedTextureBuilder.build();
+
+
 
             ShaderBuilder ssBuilder;
             ssBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/ss_vert.glsl");
@@ -275,6 +284,24 @@ public:
             glEnable(GL_DEPTH_TEST);
             switch (currentScene) {
                 case 0:
+                    //animated texture on a quad
+                    //texture taken from:
+                    // https://unity.com/blog/engine-platform/free-vfx-image-sequences-flipbooks
+                    const glm::mat4 quadMvp = m_projectionMatrix * m_viewMatrix * quadModelMatrix;
+                    const glm::mat3 quadNormalModelMatrix = glm::inverseTranspose(glm::mat3(quadModelMatrix));
+                    for (GPUMesh& mesh : anim_mesh) {
+                        m_animatedTextureShader.bind();
+                        glUniformMatrix4fv(m_animatedTextureShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(quadMvp));
+                        glUniformMatrix3fv(m_animatedTextureShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(quadNormalModelMatrix));
+                        anim_texture.bind(GL_TEXTURE5);
+                        glUniform1i(m_animatedTextureShader.getUniformLocation("tex"), 5);
+                        glUniform1i(m_animatedTextureShader.getUniformLocation("rows"), 4);
+                        glUniform1i(m_animatedTextureShader.getUniformLocation("columns"), 16);
+                        glUniform1f(m_animatedTextureShader.getUniformLocation("time"), glfwGetTime());
+                        glUniform1f(m_animatedTextureShader.getUniformLocation("animationSpeed"), 40.0f);
+                        mesh.draw(m_animatedTextureShader);
+                    }
+
                     const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
                     // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
                     // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
@@ -296,6 +323,7 @@ public:
                             glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
                         }
                         mesh.draw(m_defaultShader);
+                        
                     }
                    break;
                 case 1:
@@ -474,16 +502,20 @@ private:
     // Shader for default rendering and for depth rendering
     Shader m_defaultShader;
     Shader m_shadowShader;
+	Shader m_animatedTextureShader;
+	Texture anim_texture;
+    glm::mat4 quadModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.5f, 0.0f));
 
 
     std::vector<GPUMesh> m_meshes;
+	std::vector<GPUMesh> anim_mesh;
     Texture m_texture;
     bool m_useMaterial { true };
 
     // Projection and view matrices for you to fill in and use
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
-    glm::mat4 m_modelMatrix { 1.0f };
+    glm::mat4 m_modelMatrix{ 1.0f };
 
     //Animation variables
     bool inAnimation{ false };
@@ -493,7 +525,6 @@ private:
 	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_splines.json", false);
 	glm::vec3 currentPos{ 0.0f };
     glm::vec3 currentDir{ 0.0f, 0.0f, 1.0f };
-
 
     //Camera variables
 	glm::vec3 cameraPos{ -1.0f, 1.0f, -1.0f };
