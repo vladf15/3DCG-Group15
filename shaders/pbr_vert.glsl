@@ -18,12 +18,12 @@ out vec2 fragTexCoord;
 
 void main()
 {
-    float displacement = texture(displacementMap, texCoord).x;
+    float displacement = 0;//texture(displacementMap, texCoord).x;
     vec3 realPosition = position + normal * displacement;
 
     gl_Position = mvpMatrix * vec4(realPosition, 1);
     
     fragPosition    = (modelMatrix * vec4(realPosition, 1)).xyz;
     fragNormal      = normalModelMatrix * normal;
-    fragTexCoord    = texture(displacementMap, texCoord).xy;
+    fragTexCoord    = texCoord;
 }
