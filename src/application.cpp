@@ -34,6 +34,10 @@ struct Particle {
     float life;
     float size;
 };
+struct Coord {
+    int x; 
+    int y;
+};
 
 class Application {
 public:
@@ -148,10 +152,115 @@ public:
     }
     void create_maze() {
         maze = {};
-        std::cout << "Creating a maze of " << maze_width << "X" << maze_height << std::endl;
-        for (int i = 0; i < maze_height; i++) {
+        // std::cout << "Creating a maze of " << maze_width << "X" << maze_height << std::endl;
+        std::vector<std::vector<bool>> visited = {};
+        std::vector<std::vector<Tile>> path_matrix = {};
+        for(int j = 0; j <maze_height; j++){
+            visited.push_back({});
+            path_matrix.push_back({});
+            maze.push_back({});
+            for(int i = 0; i < maze_width; i++){
+                visited[j].push_back(false);
+                path_matrix[j].push_back(Tile{-1,-1,-1,-1});
+                maze[j].push_back(-1);
+            }
+        }
+        std::vector<Coord> visited_list = {};
+        std::random_device rd;
+        std::mt19937 gen(rd());
+
+        // Only build the maze if both ends have a size larger than 0
+        if(maze_height > 0 && maze_width > 0){
+            std::uniform_int_distribution<> x_dist(0, maze_width - 1);
+            std::uniform_int_distribution<> y_dist(0, maze_height - 1);
+            int x = x_dist(gen);
+            int y = y_dist(gen);
+            visited_list.push_back(Coord{x,y});
+            visited[y][x] = true;
+            while(visited_list.size() > 0){
+                std::uniform_int_distribution<> vl_rand(0, visited_list.size() - 1);
+                int r_coord = vl_rand(gen);
+                Coord r_xy = visited_list[r_coord];
+                std::vector<Coord> neighbors = {};
+                if(r_xy.x > 0) if(!visited[r_xy.y][r_xy.x - 1]) neighbors.push_back(Coord{r_xy.x - 1, r_xy.y});
+                if(r_xy.x < maze_width - 1) if(!visited[r_xy.y][r_xy.x + 1]) neighbors.push_back(Coord{r_xy.x + 1, r_xy.y});
+                if(r_xy.y > 0) if(!visited[r_xy.y - 1][r_xy.x]) neighbors.push_back(Coord{r_xy.x, r_xy.y - 1});
+                if(r_xy.y < maze_height - 1) if(!visited[r_xy.y + 1][r_xy.x]) neighbors.push_back(Coord{r_xy.x, r_xy.y + 1});
+                if(neighbors.size() == 0){
+                    visited_list.erase(visited_list.begin() + r_coord);
+                } else {
+                    std::uniform_int_distribution<> n_rand(0, neighbors.size() - 1);
+                    int n_coord = n_rand(gen);
+                    Coord n_xy = neighbors[n_coord];
+                    if(r_xy.x > n_xy.x){
+                        path_matrix[r_xy.y][r_xy.x].left = 1;
+                        path_matrix[n_xy.y][n_xy.x].right = 1;
+                    }
+                    if(r_xy.x < n_xy.x){
+                        path_matrix[r_xy.y][r_xy.x].right = 1;
+                        path_matrix[n_xy.y][n_xy.x].left = 1;
+                    }
+                    if(r_xy.y > n_xy.y){
+                        path_matrix[r_xy.y][r_xy.x].down = 1;
+                        path_matrix[n_xy.y][n_xy.x].up = 1;
+                    }
+                    if(r_xy.y < n_xy.y){
+                        path_matrix[r_xy.y][r_xy.x].up = 1;
+                        path_matrix[n_xy.y][n_xy.x].down = 1;
+                    }
+                    visited[n_xy.y][n_xy.x] = true;
+                    visited_list.push_back(n_xy);
+                }
+            }
+
+            // all undecided paths are no path
+            for(int j = 0; j < maze_height; j++){
+                for(int i = 0; i < maze_width; i++){
+                    if(path_matrix[j][i].up == -1) path_matrix[j][i].up = 0;
+                    if(path_matrix[j][i].right == -1) path_matrix[j][i].right = 0;
+                    if(path_matrix[j][i].down == -1) path_matrix[j][i].down = 0;
+                    if(path_matrix[j][i].left == -1) path_matrix[j][i].left = 0;
+
+                }
+            }
+
+            for(int j = 0; j < maze_height; j++){
+                for(int i = 0; i < maze_width; i++){
+                    for(int k = 0; k < full_tileset.size(); k++){
+                        if(full_tileset[k].matches_tile(path_matrix[j][i])){
+                            maze[j][i] = k;
+                        }
+                    }
+                }
+            }
+
 
         }
+
+
+
+        std::cout << "Visited: " << std::endl;
+        for(int j = maze_height - 1; j >= 0; j--){
+            for(int i = 0; i < maze_width; i++){
+                std::cout << visited[j][i] << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "Path matrix: " << std::endl;
+        for(int j = maze_height - 1; j >= 0; j--){
+            for(int i = 0; i < maze_width; i++){
+                std::cout << "{" << path_matrix[j][i].up << "," << path_matrix[j][i].right << "," << path_matrix[j][i].down << "," << path_matrix[j][i].left << "}"<< " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "Maze: " << std::endl;
+        for(int j = maze_height - 1; j >= 0; j--){
+            for(int i = 0; i < maze_width; i++){
+                std::cout << maze[j][i] << " ";
+            }
+            std::cout << std::endl;
+        }
+
     }
 
     glm::vec3 gen_rand_clr() {
@@ -615,6 +724,28 @@ public:
                             }
                         }
 
+                    }
+                    else if(wang_tile_mode == 1) {
+                        
+                    }
+                    else{
+                        for(int j = 0; j < maze_height; j++) {
+                            for(int i = 0; i < maze_width; i++) {
+                                int k = maze[j][i];
+                                glm::vec3 newPos = 2.0f * glm::vec3(-i,0.0f,j);
+                                glm::mat4 tile_model = glm::translate(glm::mat4(1.0f), newPos);
+                                glm::mat4 mvp = m_projectionMatrix * m_viewMatrix * tile_model;
+                                glm::mat3 nModel = glm::inverseTranspose(glm::mat3(tile_model));
+                                for (GPUMesh& m : full_tileset[k].mesh) {
+                                    m_solarShader.bind();
+                                    glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
+                                    glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel)); 
+                                    glUniform4f(m_solarShader.getUniformLocation("theColor"), 1.0f, 1.0f, 0.0f, 1.0f);
+                                    glUniform3f(m_solarShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
+                                    m.draw_no_mat(m_solarShader);
+                                }
+                            }
+                        }
                     }
                     break;
                 case 3:

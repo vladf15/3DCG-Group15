@@ -3,6 +3,14 @@
 #include"mesh.h"
 #include"vector"
 #include"string"
+struct Tile {
+	// 0 - no path, 1 - path, -1 - undefined
+	int up;
+	int right;
+	int down;
+	int left;
+
+};
 class WangTile {
 	public:
 		//Id of the tile
@@ -17,5 +25,6 @@ class WangTile {
 
 		WangTile(int pId, bool pUp, bool pRight, bool pDown, bool pLeft);
 		std::string get_string();
+		bool matches_tile(Tile t);
 };
 #endif
