@@ -27,12 +27,27 @@ DISABLE_WARNINGS_POP()
 #include"WangTile.h"
 #include"WangTile.cpp"
 
+
+struct Particle {
+    glm::vec3 position;
+    glm::vec3 velocity;
+    float life;
+    float size;
+};
+
 class Application {
 public:
 
     Application()
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
+		, particle_texture(RESOURCE_ROOT "resources/Flame02_16x4_1.png")
+        // Load textures for PBR shading 
+        , kaTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_AmbientOcclusion.png")
+        , kdTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_Color.png")
+        , displacementTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_Displacement.png")
+        , normalTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_NormalGL.png")
+        , roughnessTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_Roughness.png")
     {
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
@@ -48,11 +63,27 @@ public:
                 onMouseReleased(button, mods);
         });
 
+		particle_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/quad.obj");
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
         
         //Solar system initialization
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
         solar_system_ts = 0.0f;
+
+        ////////////////
+        //PARTICLE SETUP
+        ////////////////
+		for (int i = 0; i < particle_num; i++) {
+			Particle p;
+			p.position = particleSource;
+            p.velocity = 0.002f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
+			p.life = 2.0f + 1.0f * (float)rand() / RAND_MAX;
+            p.size = 0.4f;
+			particles.push_back(p);
+		}
+        pbrMeshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/Stone/surface.obj");
+        //pbrMeshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/bread/3DBread012_HQ-2K-PNG.obj");
+        
 
         //wang tiles initialization
         full_tileset.push_back(WangTile(0,  false,  false,  false,  false));
@@ -85,10 +116,25 @@ public:
             shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "Shaders/shadow_frag.glsl");
             m_shadowShader = shadowBuilder.build();
 
+			ShaderBuilder animatedTextureBuilder;
+			animatedTextureBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/animated_texture_vert.glsl");
+			animatedTextureBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/animated_texture_frag.glsl");
+            m_animatedTextureShader = animatedTextureBuilder.build();
+
             ShaderBuilder ssBuilder;
             ssBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/ss_vert.glsl");
             ssBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/ss_frag.glsl");
             m_solarShader = ssBuilder.build();
+
+            ShaderBuilder pbrBuilder; 
+            pbrBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/pbr_vert.glsl");
+            pbrBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/pbr_frag.glsl");
+            m_pbrShader = pbrBuilder.build();
+
+            ShaderBuilder lightBuilder;
+            lightBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/light_vert.glsl");
+            lightBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/light_frag.glsl");
+            lightShader = lightBuilder.build();
 
 
             // Any new shaders can be added below in similar fashion.
@@ -148,11 +194,21 @@ public:
             currentScene++;
     
         }
-        ImGui::Checkbox("Use material if no texture", &m_useMaterial);
+        ImGui::Checkbox("Use material from .mtl if no texture", &m_useMaterial);
         ImGui::Separator();
         switch(currentScene) {
             case 0:
                 ImGui::TextWrapped("This is the first scene. You can use the '1', '2' and '3' keys to switch between camera modes.");
+                ImGui::Checkbox("Enable PBR", &usePbr);
+                if (usePbr) {
+                    ImGui::Checkbox("Editable material parameters", &editableMaterial);
+                    if (editableMaterial) {
+                        ImGui::ColorEdit3("Diffuse color", &baseColor.x);
+                        ImGui::ColorEdit3("Specular color (albedo)", &albedo.x);
+                    }
+                    ImGui::DragFloat("Metallic", &metallic, 0.01f, 0.0f, 1.0f);
+                    ImGui::DragFloat("Roughness", &roughness, 0.01f, 0.0f, 1.0f);
+                }
                 break;
             case 1:
                 ImGui::TextWrapped("Displaying Solar System. Use the options to change the parameters");
@@ -247,10 +303,51 @@ public:
             case 5:
                 ImGui::TextWrapped("Displaying Inverse Kinematics Animation");
                 break;
+            case 6: 
+                ImGui::TextWrapped("Displaying PBR shading");
+                ImGui::Checkbox("Enable PBR", &usePbr);
+                break;
             default:
                 ImGui::TextWrapped("Default Scene");
                 break;
         }
+        ImGui::Separator();
+
+        ImGui::Text("Lights");
+
+        if (ImGui::Button("Create Light")) {
+            selectedLightIndex = lightPositions.size();
+            lightPositions.emplace_back(-1.0, 0.0, 0.0);
+            lightColors.emplace_back(1.0f, 1.0f, 1.0f);
+        }
+
+        // Button for clearing lights
+        if (ImGui::Button("Reset Lights")) {
+            lightPositions.clear();
+            lightPositions.emplace_back(1.0f, 1.0f, 1.0f);
+            lightColors.clear();
+            lightColors.emplace_back(1.0f, 1.0f, 1.0f);
+        }
+
+        std::vector<std::string> itemStrings = {};
+        for (size_t i = 0; i < lightPositions.size(); i++) {
+            auto string = "Light " + std::to_string(i);
+            itemStrings.push_back(string);
+        }
+
+        std::vector<const char*> itemCStrings = {};
+        for (const auto& string : itemStrings) {
+            itemCStrings.push_back(string.c_str());
+        }
+
+        int tempSelectedItem = static_cast<int>(selectedLightIndex);
+        if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
+            selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+        }
+
+        ImGui::DragFloat3("Position", &lightPositions[selectedLightIndex].x, 0.05f, -100.0f, 100.0f);
+        ImGui::ColorEdit3("Color", &lightColors[selectedLightIndex].x);
+
         ImGui::End();
     }
 
@@ -337,7 +434,13 @@ public:
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             // ...
+            glDepthFunc(GL_LESS);
+            glDepthMask(GL_TRUE);
             glEnable(GL_DEPTH_TEST);
+            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
             switch (currentScene) {
                 case 0:
                     const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
@@ -346,22 +449,111 @@ public:
                     const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
                     for (GPUMesh& mesh : m_meshes) {
-                        m_defaultShader.bind();
-                        glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-                        //Uncomment this line when you use the modelMatrix (or fragmentPosition)
-                        //glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
-                        glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-                        if (mesh.hasTextureCoords()) {
-                            m_texture.bind(GL_TEXTURE0);
-                            glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
-                            glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
-                            glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
-                        } else {
-                            glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
-                            glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
+                        if (usePbr) {
+                            m_pbrShader.bind();
+                            glUniformMatrix4fv(m_pbrShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                            glUniformMatrix4fv(m_pbrShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                            glUniformMatrix3fv(m_pbrShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                            glUniform3fv(m_pbrShader.getUniformLocation("cameraPos"), 1, glm::value_ptr(cameraPos));
+
+                            glUniform1i(m_pbrShader.getUniformLocation("useMaterial"), static_cast<int>(m_useMaterial));
+
+                            // Pass PBR parameters
+                            glUniform1f(m_pbrShader.getUniformLocation("metallic"), metallic);
+                            glUniform1f(m_pbrShader.getUniformLocation("roughness"), roughness);
+                            glUniform3fv(m_pbrShader.getUniformLocation("albedo"), 1, glm::value_ptr(albedo));
+                            glUniform1i(m_pbrShader.getUniformLocation("overrideBase"), static_cast<int>(editableMaterial));
+                            glUniform3fv(m_pbrShader.getUniformLocation("baseColor"), 1, glm::value_ptr(baseColor));
+
+                            // Pass lights
+                            glUniform1i(m_pbrShader.getUniformLocation("num_lights"), lightPositions.size());
+                            glUniform3fv(m_pbrShader.getUniformLocation("lightPositions"), lightPositions.size(), glm::value_ptr(lightPositions[0]));
+                            glUniform3fv(m_pbrShader.getUniformLocation("lightColors"), lightColors.size(), glm::value_ptr(lightColors[0]));
+
+                            glUniform1i(m_pbrShader.getUniformLocation("hasTexCoords"), static_cast<int>(mesh.hasTextureCoords()));
+                            if (mesh.hasTextureCoords()) {
+                                kdTexture.bind(GL_TEXTURE0);
+                                glUniform1i(m_pbrShader.getUniformLocation("colorMap"), 0);
+                                /*displacementTexture.bind(GL_TEXTURE1);
+                                glUniform1i(m_pbrShader.getUniformLocation("displacementMap"), 1);
+                                normalTexture.bind(GL_TEXTURE2);
+                                glUniform1i(m_pbrShader.getUniformLocation("normalMap"), 2);
+                                kaTexture.bind(GL_TEXTURE3);
+                                glUniform1i(m_pbrShader.getUniformLocation("kaMap"), 3);
+                                roughnessTexture.bind(GL_TEXTURE4);
+                                glUniform1i(m_pbrShader.getUniformLocation("roughnessMap"), 4);*/
+                            }
+                            mesh.draw(m_pbrShader);
                         }
-                        mesh.draw(m_defaultShader);
+                        else {
+                            m_defaultShader.bind();
+                            glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                            glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                            glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                            if (mesh.hasTextureCoords()) {
+                                m_texture.bind(GL_TEXTURE0);
+                                glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
+                                glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
+                                glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
+                            }
+                            else {
+                                glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                                glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
+                            }
+                            mesh.draw(m_defaultShader);
+                        }
                     }
+
+					//PARTICLE RENDERING
+                    glDepthFunc(GL_LESS);
+                    glDepthMask(GL_FALSE);
+                    glEnable(GL_BLEND);
+                    glEnable(GL_DEPTH_TEST);
+                    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+                    for (Particle& p : particles) {
+                        //animated texture on particles using a quad mesh
+                        //texture taken from:
+                        // https://unity.com/blog/engine-platform/free-vfx-image-sequences-flipbooks
+                        glm::mat4 particleModel = glm::mat4(1.0f);
+                        particleModel = glm::translate(particleModel, p.position);
+                        particleModel = glm::scale(particleModel, glm::vec3(p.size));
+						glm::vec3 directionToCamera = glm::normalize(p.position - cameraPos);
+						float angle = -atan2(directionToCamera.z, directionToCamera.x);
+						//rotate the particle around y axis to face the camera
+						const glm::mat4 particleModelMatrix = glm::rotate(particleModel, angle, glm::vec3(0.0f, 1.0f, 0.0f));
+
+                        const glm::mat4 particleMvp = m_projectionMatrix * m_viewMatrix * particleModelMatrix;
+                        const glm::mat3 particleNormalModelMatrix = glm::inverseTranspose(glm::mat3(particleModelMatrix));
+                        //fade out the particles as they despawn
+						float maxAlpha = glm::clamp(0.1f + 0.9f * p.life / 1.5f , 0.0f, 1.0f);
+                        for (GPUMesh& mesh : particle_mesh){
+                            m_animatedTextureShader.bind();
+                            glUniformMatrix4fv(m_animatedTextureShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(particleMvp));
+                            glUniformMatrix3fv(m_animatedTextureShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(particleNormalModelMatrix));
+                            particle_texture.bind(GL_TEXTURE5);
+                            glUniform1i(m_animatedTextureShader.getUniformLocation("tex"), 5);
+                            glUniform1i(m_animatedTextureShader.getUniformLocation("rows"), 4);
+                            glUniform1i(m_animatedTextureShader.getUniformLocation("columns"), 16);
+                            glUniform1f(m_animatedTextureShader.getUniformLocation("time"), glfwGetTime());
+                            glUniform1f(m_animatedTextureShader.getUniformLocation("maxAlpha"), maxAlpha);
+                            glUniform1f(m_animatedTextureShader.getUniformLocation("animationSpeed"), 40.0f);
+                            mesh.draw(m_animatedTextureShader);
+                        }
+
+						p.position += p.velocity;
+						p.size = glm::clamp(0.1f + 0.3f * p.life / 1.5f, 0.0f, 0.4f);
+                        p.life -= 0.01f;
+						//randomized velocity when spawning
+                        if (p.life <= 0.0f) {
+                            p.position = particleSource;
+                            p.velocity = 0.002f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
+                            p.life = 2.0f + 1.0f * (float)rand() / RAND_MAX;
+							p.size = 0.4f;
+                        }
+                    }
+                    glDisable(GL_BLEND);
+                    glDisable(GL_DEPTH_TEST);
+                    glDepthMask(GL_TRUE);
                    break;
                 case 1:
                     glm::mat4 sun_model = glm::mat4(1.0f);
@@ -431,11 +623,59 @@ public:
                     break;
                 case 5:
                     break;
+                case 6: 
+                    for (GPUMesh& mesh : pbrMeshes) {
+                        m_pbrShader.bind();
+                        glUniformMatrix4fv(m_pbrShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                        glUniformMatrix4fv(m_pbrShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                        glUniformMatrix3fv(m_pbrShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                        glUniform1i(m_pbrShader.getUniformLocation("usePbr"), usePbr);
+                        if (mesh.hasTextureCoords()) {
+                            glUniform1i(m_pbrShader.getUniformLocation("hasTexCoords"), GL_TRUE);
+                            kdTexture.bind(GL_TEXTURE0);
+                            glUniform1i(m_pbrShader.getUniformLocation("colorMap"), 0);
+                            m_texture.bind(GL_TEXTURE1);
+                            glUniform1i(m_pbrShader.getUniformLocation("displacementMap"), 1);
+                            normalTexture.bind(GL_TEXTURE2);
+                            glUniform1i(m_pbrShader.getUniformLocation("normalMap"), 2);
+                            kaTexture.bind(GL_TEXTURE3);
+                            glUniform1i(m_pbrShader.getUniformLocation("kaMap"), 3);
+                            roughnessTexture.bind(GL_TEXTURE4);
+                            glUniform1i(m_pbrShader.getUniformLocation("roughnessMap"), 4);
+                        }
+                        else {
+                            glUniform1i(m_pbrShader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                        }
+                        mesh.draw(m_pbrShader);
+                    }
+
+                    break;
                 default:
                     break;
             }
 
-            
+            lightShader.bind();
+            if (selectedLightIndex >= 0) {
+                const glm::vec4 screenPos = m_projectionMatrix * m_viewMatrix * glm::vec4(lightPositions[selectedLightIndex], 1.0f);
+                const glm::vec3 color{ 1, 1, 0 };
+
+                glPointSize(40.0f);
+                glUniform4fv(lightShader.getUniformLocation("pos"), 1, glm::value_ptr(screenPos));
+                glUniform3fv(lightShader.getUniformLocation("color"), 1, glm::value_ptr(color));
+                glDrawArrays(GL_POINTS, 0, 1);
+                glBindVertexArray(0);
+            }
+            for (int i = 0; i < lightPositions.size(); i++) {
+                const glm::vec4 screenPos = m_projectionMatrix * m_viewMatrix * glm::vec4(lightPositions[i], 1.0f);
+                // const glm::vec3 color { 1, 0, 0 };
+
+                glPointSize(10.0f);
+                glUniform4fv(lightShader.getUniformLocation("pos"), 1, glm::value_ptr(screenPos));
+                glUniform3fv(lightShader.getUniformLocation("color"), 1, glm::value_ptr(lightColors[i]));
+                glDrawArrays(GL_POINTS, 0, 1);
+                glBindVertexArray(0);
+
+            }
 
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
@@ -562,15 +802,42 @@ private:
     Shader m_defaultShader;
     Shader m_shadowShader;
 
+	Shader m_animatedTextureShader;
+
+    bool usePbr{ false };
+    Shader m_pbrShader;
+
+    bool editableMaterial;
+    glm::vec3 baseColor{ 0.0f, 1.0f, 0.5f };
+    glm::vec3 albedo{ 1.0f, 0.5f, 0.0f };
+    
+    float metallic{ 0.0f };
+    float roughness{ 0.3f };
+
+    Texture kaTexture;
+    Texture kdTexture;
+    Texture normalTexture;
+    Texture roughnessTexture;
+    Texture displacementTexture;
+    std::vector<GPUMesh> pbrMeshes;
+
+    Shader lightShader;
+    std::vector<glm::vec3> lightPositions{ glm::vec3(1.0f, 1.0f, 1.0f) };
+    std::vector<glm::vec3> lightColors{ glm::vec3(1.0f, 1.0f, 1.0f) };
+    int selectedLightIndex{ 0 };
+    int maxLights{ 32 }; // To allocate space in shaders
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
-    bool m_useMaterial { true };
+    bool m_useMaterial{ true };
+
+
+   
 
     // Projection and view matrices for you to fill in and use
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
-    glm::mat4 m_modelMatrix { 1.0f };
+    glm::mat4 m_modelMatrix{ 1.0f };
 
     //Animation variables
     bool inAnimation{ false };
@@ -580,6 +847,15 @@ private:
 	std::vector<BezierSpline> animPath = loadSplines(RESOURCE_ROOT "resources/bezier_splines.json", false);
 	glm::vec3 currentPos{ 0.0f };
     glm::vec3 currentDir{ 0.0f, 0.0f, 1.0f };
+
+    //Particle variables
+    std::vector<GPUMesh> particle_mesh;
+    std::vector<Particle> particles;
+    Texture particle_texture;
+	int particle_num = 10;
+	glm::vec3 particleSource = glm::vec3(0.0f, 0.5f, 0.0f);
+    //glm::mat4 particleModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.5f, 0.0f));
+
 
 
     //Camera variables

@@ -10,7 +10,7 @@ GPUMaterial::GPUMaterial(const Material& material) :
     kd(material.kd),
     ks(material.ks),
     shininess(material.shininess),
-    transparency(material.transparency)
+    opacity(material.transparency)
 {}
 
 GPUMesh::GPUMesh(const Mesh& cpuMesh)

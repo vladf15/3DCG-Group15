@@ -22,7 +22,7 @@ struct GPUMaterial {
     alignas(16) glm::vec3 kd{ 1.0f };
 	alignas(16) glm::vec3 ks{ 0.0f };
 	float shininess{ 1.0f };
-	float transparency{ 1.0f };
+	float opacity{ 1.0f };
 };
 
 class GPUMesh {
