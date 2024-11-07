@@ -24,7 +24,8 @@ DISABLE_WARNINGS_POP()
 #include"Planet.h"
 #include"Planet.cpp"
 #include<random>
-
+#include"WangTile.h"
+#include"WangTile.cpp"
 
 class Application {
 public:
@@ -48,8 +49,30 @@ public:
         });
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
+        
+        //Solar system initialization
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
         solar_system_ts = 0.0f;
+
+        //wang tiles initialization
+        full_tileset.push_back(WangTile(0,  false,  false,  false,  false));
+        full_tileset.push_back(WangTile(1,  true,   false,  false,  false));
+        full_tileset.push_back(WangTile(2,  false,  true,   false,  false));
+        full_tileset.push_back(WangTile(3,  true,   true,   false,  false));
+        full_tileset.push_back(WangTile(4,  false,  false,  true,   false));
+        full_tileset.push_back(WangTile(5,  true,   false,  true,   false));
+        full_tileset.push_back(WangTile(6,  false,  true,   true,   false));
+        full_tileset.push_back(WangTile(7,  true,   true,   true,   false));
+        full_tileset.push_back(WangTile(8,  false,  false,  false,  true));
+        full_tileset.push_back(WangTile(9,  true,   false,  false,  true));
+        full_tileset.push_back(WangTile(10, false,  true,   false,  true));
+        full_tileset.push_back(WangTile(11, true,   true,   false,  true));
+        full_tileset.push_back(WangTile(12, false,  false,  true,   true));
+        full_tileset.push_back(WangTile(13, true,   false,  true,   true));
+        full_tileset.push_back(WangTile(14, false,  true,   true,   true));
+        full_tileset.push_back(WangTile(15, true,   true,   true,   true));
+        wang_tile_mode = 0;
+        create_maze();
         
         try {
             ShaderBuilder defaultBuilder;
@@ -77,6 +100,14 @@ public:
             std::cerr << e.what() << std::endl;
         }
     }
+    void create_maze() {
+        maze = {};
+        std::cout << "Creating a maze of " << maze_width << "X" << maze_height << std::endl;
+        for (int i = 0; i < maze_height; i++) {
+
+        }
+    }
+
     glm::vec3 gen_rand_clr() {
         std::random_device rd;
         std::mt19937 gen(rd());
@@ -108,11 +139,12 @@ public:
         if(ImGui::Button("Previous Scene")) {
             if (currentScene > 0) {
                 currentScene--;
+                triggered = false;
             }
         }
         ImGui::SameLine();
         if (ImGui::Button("Next Scene")) {
-           
+            triggered == false;
             currentScene++;
     
         }
@@ -171,7 +203,40 @@ public:
                 
                 break;
             case 2:
-                ImGui::TextWrapped("Displaying Infinite maze");
+                ImGui::TextWrapped("Displaying Wang tiles scene");
+                ImGui::Separator();
+                ImGui::TextWrapped("Select the scene to visualize");
+                if (ImGui::Button("Display Tileset")) {
+                    wang_tile_mode = 0;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Infinite Terrain")) {
+                    wang_tile_mode = 1;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Maze")) {
+                    wang_tile_mode = 2;
+                }
+                ImGui::Separator();
+                if (wang_tile_mode == 0) {
+                    ImGui::TextWrapped("Displaying the full tileset");
+                }
+                else if (wang_tile_mode == 1) {
+                    ImGui::TextWrapped("Infinite terrain!");
+                }
+                else {
+                    ImGui::TextWrapped("Displaying the maze. Please adjust the width and height");
+                    
+                    ImGui::InputInt("Width", &t_maze_width);
+                    ImGui::InputInt("Height", &t_maze_height);
+                    if (ImGui::Button("Create maze")) {
+                        if (t_maze_width > 0 && t_maze_height > 0) {
+                            maze_width = t_maze_width;
+                            maze_height = t_maze_height;
+                            create_maze();
+                        }
+                    }
+                }
                 break;
             case 3:
                 ImGui::TextWrapped("Displaying Procedural Trees");
@@ -330,6 +395,7 @@ public:
                                 glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel));
                                 glUniform4f(m_solarShader.getUniformLocation("theColor"), c.x, c.y, c.z, 1.0f);
                                 mesh.draw_no_mat(m_solarShader);
+
                             }
                         }
                     }
@@ -337,6 +403,27 @@ public:
                     break;
                 case 2:
                     // Implementation based on wang tiles https://www.boristhebrave.com/permanent/24/06/cr31/stagecast/wang/intro.html
+                    if (wang_tile_mode == 0) {
+                        for (int i = 0; i < 4; i++) {
+                            for (int j = 0; j < 4; j++) {
+                                int k = 4 * i + j;
+                                glm::vec3 newPos = 2.5f * glm::vec3(-j, 0.0f, i);
+                                glm::mat4 tile_model = glm::translate(glm::mat4(1.0f), newPos);
+                                glm::mat4 mvp = m_projectionMatrix * m_viewMatrix * tile_model;
+                                glm::mat3 nModel = glm::inverseTranspose(glm::mat3(tile_model));
+                                for (GPUMesh& m : full_tileset[k].mesh) {
+                                    m_solarShader.bind();
+                                    glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
+                                    glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel));
+                                    glUniform4f(m_solarShader.getUniformLocation("theColor"), 1.0f, 1.0f, 0.0f, 1.0f);
+                                    glUniform3f(m_solarShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
+                                    m.draw_no_mat(m_solarShader);
+                                }
+
+                            }
+                        }
+
+                    }
                     break;
                 case 3:
                     break;
@@ -529,6 +616,14 @@ private:
     std::vector<Planet> planets;
     size_t selected_planet;
 
+    //Wang Tiles
+    std::vector<WangTile> full_tileset;
+    int wang_tile_mode; // Mode of visualization: 0 for the full tileset, 1 for the infinite terrain, 2 for the maze
+    int maze_width = 0;
+    int maze_height = 0;
+    int t_maze_width = 0;
+    int t_maze_height = 0;
+    std::vector<std::vector<int>> maze;
 };
 
 int main()
