@@ -1,0 +1,16 @@
+# Blender MTL File: 'sphere.blend'
+# Material Count: 1
+
+newmtl Material.001
+Ns 92.156863
+Ka 0.000000 0.000000 0.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.297297 0.297297 0.297297
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd PavingStones142_2K-PNG_Color.png
+disp PavingStones142_2K-PNG_Color.png
+map_bump PavingStones142_2K-PNG_NormalGL.png
+map_Pr PavingStones142_2K-PNG_Roughness.png
+map_Ka PavingStones142_2K-PNG_AmbientOcclusion.png

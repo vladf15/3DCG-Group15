@@ -32,6 +32,12 @@ public:
     Application()
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
+        // Load textures for PBR shading 
+        , kaTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_AmbientOcclusion.png")
+        , kdTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_Color.png")
+        , displacementTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_Displacement.png")
+        , normalTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_NormalGL.png")
+        , roughnessTexture(RESOURCE_ROOT "resources/Stone/PavingStones142_2K-PNG_Roughness.png")
     {
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
@@ -50,6 +56,8 @@ public:
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
         solar_system_ts = 0.0f;
+        pbrMeshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/Stone/surface.obj");
+        //pbrMeshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/bread/3DBread012_HQ-2K-PNG.obj");
         
         try {
             ShaderBuilder defaultBuilder;
@@ -66,6 +74,11 @@ public:
             ssBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/ss_vert.glsl");
             ssBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/ss_frag.glsl");
             m_solarShader = ssBuilder.build();
+
+            ShaderBuilder pbrBuilder; 
+            pbrBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/pbr_vert.glsl");
+            pbrBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/pbr_frag.glsl");
+            m_pbrShader = pbrBuilder.build();
 
 
             // Any new shaders can be added below in similar fashion.
@@ -182,6 +195,10 @@ public:
             case 5:
                 ImGui::TextWrapped("Displaying Inverse Kinematics Animation");
                 break;
+            case 6: 
+                ImGui::TextWrapped("Displaying PBR shading");
+                ImGui::Checkbox("Enable PBR", &usePbr);
+                break;
             default:
                 ImGui::TextWrapped("Default Scene");
                 break;
@@ -273,13 +290,12 @@ public:
 
             // ...
             glEnable(GL_DEPTH_TEST);
+            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+            // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
+            // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
+            const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
             switch (currentScene) {
                 case 0:
-                    const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
-                    // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
-                    // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
-                    const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
-
                     for (GPUMesh& mesh : m_meshes) {
                         m_defaultShader.bind();
                         glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
@@ -343,6 +359,33 @@ public:
                 case 4:
                     break;
                 case 5:
+                    break;
+                case 6: 
+                    for (GPUMesh& mesh : pbrMeshes) {
+                        m_pbrShader.bind();
+                        glUniformMatrix4fv(m_pbrShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                        glUniformMatrix4fv(m_pbrShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                        glUniformMatrix3fv(m_pbrShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                        glUniform1i(m_pbrShader.getUniformLocation("usePbr"), usePbr);
+                        if (mesh.hasTextureCoords()) {
+                            glUniform1i(m_pbrShader.getUniformLocation("hasTexCoords"), GL_TRUE);
+                            kdTexture.bind(GL_TEXTURE0);
+                            glUniform1i(m_pbrShader.getUniformLocation("colorMap"), 0);
+                            m_texture.bind(GL_TEXTURE1);
+                            glUniform1i(m_pbrShader.getUniformLocation("displacementMap"), 1);
+                            normalTexture.bind(GL_TEXTURE2);
+                            glUniform1i(m_pbrShader.getUniformLocation("normalMap"), 2);
+                            kaTexture.bind(GL_TEXTURE3);
+                            glUniform1i(m_pbrShader.getUniformLocation("kaMap"), 3);
+                            roughnessTexture.bind(GL_TEXTURE4);
+                            glUniform1i(m_pbrShader.getUniformLocation("roughnessMap"), 4);
+                        }
+                        else {
+                            glUniform1i(m_pbrShader.getUniformLocation("hasTexCoords"), GL_FALSE);
+                        }
+                        mesh.draw(m_pbrShader);
+                    }
+
                     break;
                 default:
                     break;
@@ -474,7 +517,15 @@ private:
     // Shader for default rendering and for depth rendering
     Shader m_defaultShader;
     Shader m_shadowShader;
-
+    
+    bool usePbr;
+    Shader m_pbrShader;
+    Texture kaTexture;
+    Texture kdTexture;
+    Texture normalTexture;
+    Texture roughnessTexture;
+    Texture displacementTexture;
+    std::vector<GPUMesh> pbrMeshes;
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
