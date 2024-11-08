@@ -259,13 +259,11 @@ public:
             bloomBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/bloom_frag.glsl");
             m_bloomShader = bloomBuilder.build();
 
-
-            /*
             ShaderBuilder dofBuilder;
             dofBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/blur_vert.glsl");
             dofBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/dof_frag.glsl");
             m_dofShader = dofBuilder.build();
-            */
+            
 
 
             // Any new shaders can be added below in similar fashion.
@@ -568,6 +566,10 @@ public:
                     ImGui::SliderInt("Bloom Passes", &bloomPasses, 1, 10);
 					ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 1.0f);
                 }
+				if (useDoF) {
+					ImGui::SliderFloat("DoF Focal Distance", &focalLength, 0.0f, 50.0f);
+					ImGui::SliderFloat("DoF Focal Range", &focalRange, 0.0f, 10.0f);
+				}
                 if (usePbr) {
                     ImGui::Checkbox("Editable material parameters", &editableMaterial);
                     if (editableMaterial) {
@@ -931,20 +933,20 @@ public:
 					/////////////////////////
                     if (useBloom || useDoF) {
                         glBindFramebuffer(GL_FRAMEBUFFER, postProcessingBuffer);
-						//detaching postProcessingColorTexture1 from scene buffer and using it for post processing
-                        if (useBloom) {
-                            int windowWidth, windowHeight;
-                            windowWidth = m_window.getWindowSize().x;
-                            windowHeight = m_window.getWindowSize().y;
-                            bool horizontal = true;
-							bool finalPass = false;
-                            glActiveTexture(GL_TEXTURE6);
-                            glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
-                            glActiveTexture(GL_TEXTURE7);
-                            glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture1);
-                            glActiveTexture(GL_TEXTURE8);
-                            glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture2);
-                            
+                        int windowWidth, windowHeight;
+                        windowWidth = m_window.getWindowSize().x;
+                        windowHeight = m_window.getWindowSize().y;
+                        bool horizontal = true;
+                        bool finalPass = false;
+                        glActiveTexture(GL_TEXTURE6);
+                        glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
+                        glActiveTexture(GL_TEXTURE7);
+                        glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture1);
+                        glActiveTexture(GL_TEXTURE8);
+                        glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture2);
+                        glActiveTexture(GL_TEXTURE9);
+                        glBindTexture(GL_TEXTURE_2D, sceneDepthTexture);
+                        if (useBloom){
                             for (int i = 0; i < bloomPasses; i++) {
                                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postProcessingColorTexture2, 0);
                                 m_bloomShader.bind();
@@ -972,13 +974,39 @@ public:
                                 glUniform1i(m_bloomShader.getUniformLocation("bloomRadius"), bloomRadius);
                                 glUniform1f(m_bloomShader.getUniformLocation("bloomIntensity"), bloomIntensity);
                                 glUniform1i(m_bloomShader.getUniformLocation("finalPass"), finalPass);
-                                renderToTexture(postProcessingColorTexture1);
+                                if (finalPass) {
+									renderToTexture(sceneColorTexture);
+                                }
+                                else {
+                                    renderToTexture(postProcessingColorTexture1);
+                                }
                             }
+                        }
+                        if (useDoF) {
+							glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneColorTexture, 0);
+                            m_dofShader.bind();
+                            glUniform1i(m_dofShader.getUniformLocation("horizontal"), true);
+                            glUniform1i(m_dofShader.getUniformLocation("sceneTexture"), 6);
+							glUniform1i(m_dofShader.getUniformLocation("depthTexture"), 9);
+                            glUniform1i(m_dofShader.getUniformLocation("width"), windowWidth);
+                            glUniform1i(m_dofShader.getUniformLocation("height"), windowHeight);
+                            glUniform1f(m_dofShader.getUniformLocation("focalLength"), focalLength);
+                            glUniform1f(m_dofShader.getUniformLocation("focalRange"), focalRange);
+                            renderToTexture(postProcessingColorTexture1);
+                            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postProcessingColorTexture1, 0);
+							m_dofShader.bind();
+                            glUniform1i(m_dofShader.getUniformLocation("horizontal"), false);
+                            glUniform1i(m_dofShader.getUniformLocation("sceneTexture"), 7);
+                            glUniform1i(m_dofShader.getUniformLocation("depthTexture"), 9);
+                            glUniform1i(m_dofShader.getUniformLocation("width"), windowWidth);
+                            glUniform1i(m_dofShader.getUniformLocation("height"), windowHeight);
+                            glUniform1f(m_dofShader.getUniformLocation("focalLength"), focalLength);
+                            glUniform1f(m_dofShader.getUniformLocation("focalRange"), focalRange);
                         }
                         
                         glBindFramebuffer(GL_FRAMEBUFFER, 0); // Bind back to default framebuffer
                         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear screen
-                        renderToTexture(postProcessingColorTexture1);
+                        renderToTexture(sceneColorTexture);
                      
                     }
                    break;
@@ -1533,6 +1561,9 @@ private:
     int bloomRadius{ 5 };
     float bloomIntensity{ 1.0f };
 	float bloomThreshold{ 1.0f };
+
+	float focalLength{ 0.5f };
+    float focalRange{ 0.5f };
     GLuint postProcessingVAO, postProcessingVBO;
 	GLuint sceneBuffer; //original output
 	GLuint postProcessingBuffer; //extracted intense regions for bloom
