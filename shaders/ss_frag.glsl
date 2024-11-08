@@ -15,7 +15,7 @@ vec4 direcLight()
 
 	// // diffuse lighting
 	vec3 normal = normalize(Normal);
-	vec3 lightDirection = normalize(vec3(3.0f, 2.0f, -1.0f));
+	vec3 lightDirection = normalize(vec3(3.0f, 2.0f, -10.0f));
 	lightDirection = normalize(-camPos);
 	float diffuse = max(dot(normal, lightDirection), 0.0f);
 
