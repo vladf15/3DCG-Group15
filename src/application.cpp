@@ -574,7 +574,7 @@ public:
                 }
 				if (useDoF) {
 					ImGui::SliderFloat("DoF Focal Length", &focalLength, focalRange, 1.0f);
-					ImGui::SliderFloat("DoF Focal Range", &focalRange, 0.02f, focalLength);
+					ImGui::SliderFloat("DoF Focal Range", &focalRange, 0.01f, focalLength);
 				}
                 if (usePbr) {
                     ImGui::Checkbox("Editable material parameters", &editableMaterial);
