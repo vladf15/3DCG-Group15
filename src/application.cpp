@@ -600,12 +600,24 @@ public:
 
                 break;
             case 4:
-                ImGui::TextWrapped("Displaying Procedural water surface");
+                ImGui::TextWrapped("Displaying Procedural water surface. Select parameters:");
+                ImGui::TextWrapped("Wave center");
+                ImGui::SliderFloat("X", &t_wave_center.x, -30.0f, 30.0f);
+                ImGui::SliderFloat("Z", &t_wave_center.y, -30.0f, 30.0f);
+                ImGui::InputFloat("Wave speed", &t_wave_speed);
+                ImGui::SliderFloat("Wave length (as a proportion of radius)", &t_lambda, 0.01f, 1.0f);
+                ImGui::InputFloat("Wave period", &t_phi);
+                ImGui::InputFloat("Dampening (if less than one amplifies instead)", &t_dampening);
                 ImGui::InputFloat("Animation Time", &max_wave_time);
                 if(ImGui::Button("Start animation")) {
                     if(!water_enabled) {
                         water_ts = 0.1f;
                         water_enabled = true;
+                        wave_center = t_wave_center;
+                        wave_speed = t_wave_speed;
+                        lambda = t_lambda;
+                        phi = t_phi;
+                        dampening = t_dampening;
                     }else{
                         water_ts = -1.0f;
                     }
@@ -1104,6 +1116,11 @@ public:
                         glUniform3f(waterShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
                         glUniform1f(waterShader.getUniformLocation("ts"), water_ts);
                         glUniform4f(waterShader.getUniformLocation("theColor"), 0.0f, 0.0f, 1.0f, 1.0f);
+                        glUniform2f(waterShader.getUniformLocation("wave_center"),wave_center.x,wave_center.y);
+                        glUniform1f(waterShader.getUniformLocation("wave_speed"),wave_speed);
+                        glUniform1f(waterShader.getUniformLocation("lambda"),lambda);
+                        glUniform1f(waterShader.getUniformLocation("phi"),phi);
+                        glUniform1f(waterShader.getUniformLocation("dampening"),dampening);
                         m.draw_no_mat(waterShader);
                     }
                     if(water_enabled){
@@ -1466,6 +1483,16 @@ private:
     float water_ts = 0.0f;
     bool water_enabled = false;
     float max_wave_time = 10.0f;
+    glm::vec2 wave_center = glm::vec2(0.0f, 0.0f);
+    float wave_speed = 1.0f;
+    float lambda = 0.9f;
+    float phi = 10.0f;
+    float dampening = 2.0f;
+    glm::vec2 t_wave_center = glm::vec2(0.0f, 0.0f);
+    float t_wave_speed = 1.0f;
+    float t_lambda = 0.9f;
+    float t_phi = 10.0f;
+    float t_dampening = 2.0f;
 };
 
 int main()
