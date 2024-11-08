@@ -81,6 +81,7 @@ public:
         branch_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/branch.obj");
         //Solar system initialization
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
+        water_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/water.obj");
         solar_system_ts = 0.0f;
         bread = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/bread/3DBread012_HQ-2K-PNG.obj");
 
@@ -239,6 +240,11 @@ public:
             ssBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/ss_vert.glsl");
             ssBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/ss_frag.glsl");
             m_solarShader = ssBuilder.build();
+
+            ShaderBuilder waterBuilder;
+            waterBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/water_vert.glsl");
+            waterBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/water_frag.glsl");
+            waterShader = waterBuilder.build();
 
             ShaderBuilder pbrBuilder; 
             pbrBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/pbr_vert.glsl");
@@ -695,13 +701,34 @@ public:
                 if(!random_rotation) ImGui::SliderFloat("Set the branch angle (horizontal)", &branch_rotation, 0.0f, 180.0f);
                 ImGui::Separator();
 
-
                 break;
             case 4:
-                ImGui::TextWrapped("Displaying Procedural water surface");
+                ImGui::TextWrapped("Displaying Procedural water surface. Select parameters:");
+                ImGui::TextWrapped("Wave center");
+                ImGui::SliderFloat("X", &t_wave_center.x, -30.0f, 30.0f);
+                ImGui::SliderFloat("Z", &t_wave_center.y, -30.0f, 30.0f);
+                ImGui::InputFloat("Wave speed", &t_wave_speed);
+                ImGui::SliderFloat("Wave length (as a proportion of radius)", &t_lambda, 0.01f, 1.0f);
+                ImGui::InputFloat("Wave period", &t_phi);
+                ImGui::InputFloat("Dampening (if less than one amplifies instead)", &t_dampening);
+                ImGui::InputFloat("Animation Time", &max_wave_time);
+                if(ImGui::Button("Start animation")) {
+                    if(!water_enabled) {
+                        water_ts = 0.1f;
+                        water_enabled = true;
+                        wave_center = t_wave_center;
+                        wave_speed = t_wave_speed;
+                        lambda = t_lambda;
+                        phi = t_phi;
+                        dampening = t_dampening;
+                    }else{
+                        water_ts = -1.0f;
+                    }
+                }
                 break;
             case 5:
                 ImGui::TextWrapped("Displaying Inverse Kinematics Animation");
+                ImGui::TextWrapped("NOT IMPLEMENTED, GO TO NEXT SCENE");
                 break;
             case 6: 
                 ImGui::TextWrapped("Displaying PBR shading with normal mapping and ambient occlusion mapping");
@@ -722,11 +749,17 @@ public:
 
     void update()
     {
+
+        
+        auto t1 = std::chrono::high_resolution_clock::now();
         while (!m_window.shouldClose()) {
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
-
+            auto t2 = std::chrono::high_resolution_clock::now();
+            float deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(t2 - t1).count();
+            t1 = t2;
+            std::cout << "deltaTime: " << std::to_string(deltaTime) << std::endl;
           
             //animation code
             if (inAnimation) {
@@ -814,6 +847,17 @@ public:
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
             switch (currentScene) {
                 case 0:
+                    waterShader.bind();
+                    glm::mat4 mat_model = glm::mat4(1.0f);
+                    glm::mat4 mvp_mat = m_projectionMatrix * m_viewMatrix * mat_model;
+                    glm::mat3 nModel_mat = glm::inverseTranspose(glm::mat3(mat_model));
+                    for (GPUMesh& m : water_mesh) {
+                        glUniformMatrix4fv(waterShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp_mat));
+                        glUniformMatrix3fv(waterShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel_mat));
+                        glUniform3f(waterShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
+                        glUniform4f(waterShader.getUniformLocation("theColor"), 0.0f, 0.0f, 1.0f, 1.0f);
+                        m.draw_no_mat(waterShader);
+                    }
                     for (GPUMesh& mesh : m_meshes) {
                         if (usePbr) {
                             m_pbrShader.bind();
@@ -1019,7 +1063,7 @@ public:
                         mesh.draw_no_mat(m_solarShader);
                         for (int i = 0; i < planets.size(); i++) {
                             Planet p = planets[i];
-                            glm::mat4 p_model = p.GetModel(sun_model, solar_system_ts, i);
+                            glm::mat4 p_model = p.GetModel(sun_model, solar_system_ts, i, sun_size, sun_pos);
                             mvp = m_projectionMatrix * m_viewMatrix * p_model;
                             nModel = glm::inverseTranspose(glm::mat3(p_model));
                             glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
@@ -1263,6 +1307,31 @@ public:
                     break;
                 }
                 case 4:
+                    waterShader.bind();
+                    glm::mat4 water_model = glm::mat4(1.0f);
+                    glm::mat4 mvp_wtr = m_projectionMatrix * m_viewMatrix * water_model;
+                    glm::mat3 nModel_wtr = glm::inverseTranspose(glm::mat3(water_model));
+                    for (GPUMesh& m : water_mesh) {
+                        glUniformMatrix4fv(waterShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp_wtr));
+                        glUniformMatrix3fv(waterShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel_wtr));
+                        glUniform3f(waterShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
+                        glUniform4f(waterShader.getUniformLocation("theColor"), 0.0f, 0.0f, 1.0f, 1.0f);
+                        glUniform1f(waterShader.getUniformLocation("ts"), water_ts);
+                        glUniform2f(waterShader.getUniformLocation("wave_center"),wave_center.x,wave_center.y);
+                        glUniform1f(waterShader.getUniformLocation("wave_speed"),wave_speed);
+                        glUniform1f(waterShader.getUniformLocation("lambda"),lambda);
+                        glUniform1f(waterShader.getUniformLocation("phi"),phi);
+                        glUniform1f(waterShader.getUniformLocation("dampening"),dampening);
+                        m.draw_no_mat(waterShader);
+                    }
+                    if(water_enabled){
+                        //water_ts += 0.1f;
+                        water_ts += deltaTime;
+                        if(water_ts > max_wave_time){
+                            water_ts = -1.0f;
+                            water_enabled = false;
+                        }
+                    }
                     break;
                 case 5:
                     break;
@@ -1484,6 +1553,7 @@ private:
     bool usePbr{ false };
     Shader m_pbrShader;
     Shader advancedPbrShader;
+    Shader waterShader;
 
     bool useNormalMap{ true };
     bool editableMaterial{ true };
@@ -1625,6 +1695,23 @@ private:
     bool random_inclination = false;
     bool random_rotation = false;
 
+
+    //Water
+
+    std::vector<GPUMesh> water_mesh;
+    float water_ts = 0.0f;
+    bool water_enabled = false;
+    float max_wave_time = 10.0f;
+    glm::vec2 wave_center = glm::vec2(0.0f, 0.0f);
+    float wave_speed = 1.0f;
+    float lambda = 0.9f;
+    float phi = 10.0f;
+    float dampening = 2.0f;
+    glm::vec2 t_wave_center = glm::vec2(0.0f, 0.0f);
+    float t_wave_speed = 1.0f;
+    float t_lambda = 0.9f;
+    float t_phi = 10.0f;
+    float t_dampening = 2.0f;
 };
 
 int main()
