@@ -26,7 +26,8 @@ DISABLE_WARNINGS_POP()
 #include<random>
 #include"WangTile.h"
 #include"WangTile.cpp"
-
+#include"Grammar.h"
+#include"Grammar.cpp"
 
 struct Particle {
     glm::vec3 position;
@@ -77,7 +78,7 @@ public:
 
 		particle_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/quad.obj");
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
-        
+        branch_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/branch.obj");
         //Solar system initialization
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
         solar_system_ts = 0.0f;
@@ -124,6 +125,28 @@ public:
         current_coord = Coord{0,0};
         //  int terrain_width, terrain_height, t_terrain_width, t_terrain_height;
         
+
+        // L Systems
+        
+	    grammars = {};
+
+        std::string s = "F";
+        std::vector<std::tuple<char,std::string>> rls = {};
+        std::tuple<char, std::string> rule = std::make_tuple('F', "FF+[+F-F-F]-[-F+F+F]");
+        rls.push_back(rule);
+        grammars.push_back(Grammar(s, rls, 5));
+
+        s = "X";
+        rls = {};
+        rls.push_back(std::make_tuple('F', "FF"));
+        rls.push_back(std::make_tuple('X', "F[+X]F[-X]+X"));
+        grammars.push_back(Grammar(s, rls, 7));
+
+        s = "F";
+        rls = {};
+        rls.push_back(std::make_tuple('F', "FF*[++F-F-F]*[++F-F-F]*[++F-F-F]"));
+        grammars.push_back(Grammar(s, rls, 4));
+
         try {
             ShaderBuilder defaultBuilder;
             defaultBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shader_vert.glsl");
@@ -546,6 +569,20 @@ public:
                 break;
             case 3:
                 ImGui::TextWrapped("Displaying Procedural Trees");
+                if (ImGui::SliderInt("Select the grammar", &selected_grammar, 0, grammars.size() - 1)) {
+                    grammar_step = 0;
+                }
+
+                ImGui::TextWrapped(grammars[selected_grammar].PrintInfo(false).c_str());
+                ImGui::SliderInt("Set the step", &grammar_step, 0, grammars[selected_grammar].steps.size() - 1);
+                ImGui::TextWrapped("Randomize the branch angles?");
+                ImGui::Checkbox("Randomize the vertical angle", &random_inclination);
+                ImGui::Checkbox("Randomize the horizontal angle", &random_rotation);
+                if (!random_inclination) ImGui::SliderFloat("Set the branch angle (vertical)", &branch_inclination, 0.0f, 90.0f);
+                if(!random_rotation) ImGui::SliderFloat("Set the branch angle (horizontal)", &branch_rotation, 0.0f, 180.0f);
+                ImGui::Separator();
+
+
                 break;
             case 4:
                 ImGui::TextWrapped("Displaying Procedural water surface");
@@ -979,7 +1016,53 @@ public:
                     }
                     break;
                 case 3:
+                {
+
+                    m_solarShader.bind();
+                    std::string tree = grammars[selected_grammar].steps[grammar_step];
+                    std::vector<glm::mat4> saved = {};
+                    glm::vec3 translation = glm::vec3(0.0f, 2.0f, 0.0f);
+                    glm::vec3 branch_inclination_axis = glm::vec3(0.0f, 0.0f, 1.0f);
+                    glm::vec3 branch_rotation_axis = glm::vec3(0.0f, 1.0f, 0.0f);
+                    glm::mat4 branch_model = glm::mat4(1.0f);
+                    glUniform3f(m_solarShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
+                    glUniform4f(m_solarShader.getUniformLocation("theColor"), 1.0f, 1.0f, 0.0f, 1.0f);
+                    for (int i = 0; i < tree.length(); i++) {
+                        char t = tree[i];
+                        switch (t) {
+                        case 'F':
+                            for (GPUMesh& m : branch_mesh) {
+                                glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(m_projectionMatrix * m_viewMatrix * branch_model));
+                                glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(glm::inverseTranspose(glm::mat3(branch_model))));
+                                m.draw_no_mat(m_solarShader);
+                                branch_model = glm::translate(branch_model, translation);
+                            }
+                            break;
+                        case '+':
+                            branch_model = glm::rotate(branch_model, glm::radians(branch_inclination), branch_inclination_axis);
+                            break;
+                        case '-':
+                            branch_model = glm::rotate(branch_model, -glm::radians(branch_inclination), branch_inclination_axis);
+                            break;
+                        case '*':
+                            branch_model = glm::rotate(branch_model, glm::radians(branch_rotation), branch_rotation_axis);
+                            break;
+                        case '/':
+                            branch_model = glm::rotate(branch_model, -glm::radians(branch_rotation), branch_rotation_axis);
+                            break;
+                        case '[':
+                            saved.push_back(branch_model);
+                            break;
+                        case ']':
+                            branch_model = saved.back();
+                            saved.pop_back();
+                            break;
+                        default:
+                            break;
+                        }
+                    }
                     break;
+                }
                 case 4:
                     break;
                 case 5:
@@ -1240,7 +1323,7 @@ private:
    
 
     // Projection and view matrices for you to fill in and use
-    glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
+    glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 300.0f);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
     glm::mat4 m_modelMatrix{ 1.0f };
 
@@ -1310,6 +1393,18 @@ private:
     int terrain_width, terrain_height, t_terrain_width, t_terrain_height;
     Coord current_coord;
     float terrain_epsilon = 0.02f;
+
+
+    //L-systems
+    std::vector<GPUMesh> branch_mesh;
+    std::vector<Grammar> grammars;
+    int selected_grammar = 0;
+    int grammar_step = 0;
+    float branch_inclination = 22.5f;
+    float branch_rotation = 120.0f;
+    bool random_inclination = false;
+    bool random_rotation = false;
+
 };
 
 int main()
