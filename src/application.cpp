@@ -38,6 +38,11 @@ struct Coord {
     int x; 
     int y;
 };
+struct TerrainTile {
+    int id;
+    Coord coord;
+    Tile tile;
+};
 
 class Application {
 public:
@@ -108,6 +113,12 @@ public:
         full_tileset.push_back(WangTile(15, true,   true,   true,   true));
         wang_tile_mode = 0;
         create_maze();
+        terrain_width = 1;
+        terrain_height = 1;
+        t_terrain_width = 1;
+        t_terrain_height = 1;
+        current_coord = Coord{0,0};
+        //  int terrain_width, terrain_height, t_terrain_width, t_terrain_height;
         
         try {
             ShaderBuilder defaultBuilder;
@@ -148,6 +159,72 @@ public:
             // ....
         } catch (ShaderLoadingException e) {
             std::cerr << e.what() << std::endl;
+        }
+    }
+
+    Coord get_tile_coord(){
+        float x = cameraPos.x;
+        float z = cameraPos.z;
+        // std::cout << "Now at " << x << ", " << z << std::endl;
+        float test_x = floor(x) == ceil(x) ? x - terrain_epsilon : x;
+        float test_z = floor(z) == ceil(z) ? z - terrain_epsilon : z;
+
+        return Coord{int(ceil(test_x)), int(floor(test_z))};
+    }
+    std::vector<int> get_possible_tiles(int up, int right, int down, int left){
+        std::vector<int> possible_tiles = {};
+        for(int i = 1; i < full_tileset.size(); i++){
+            if(full_tileset[i].matches_tile(Tile{up, right, down, left})){
+                possible_tiles.push_back(i);
+            }
+        }
+        return possible_tiles;
+    }
+    void create_infinite_terrain(){
+        terrain = {};
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        // Initializing the terrain as a matrix of all tiles id = -1 and coord = (0,0)
+        for(int j = 0; j < (2 * terrain_height + 1); j++){
+            terrain.push_back({});
+            for(int i = 0; i < (2 * terrain_width + 1); i++){
+                int x_coord = -i + current_coord.x + terrain_width;
+                int y_coord = j + current_coord.y - terrain_height;
+                int left = i > 0 ? terrain[j][i - 1].tile.right : -1;
+                int down = j > 0 ? terrain[j - 1][i].tile.up : -1;
+                int right = -1;
+                int up = -1;
+                int id = -1;
+                std::vector<int> possible_tiles = get_possible_tiles(down, right, down, left);
+                if(possible_tiles.size() > 0){
+                    std::uniform_int_distribution<> dis(0, possible_tiles.size() - 1);
+                    id = possible_tiles[dis(gen)];
+                    up = full_tileset[id].up;
+                    right = full_tileset[id].right;
+                    down = full_tileset[id].down;
+                    left = full_tileset[id].left;
+                }
+                else{
+                    std::cout << "ERRORRRRRRRRRRRRRRRRRR" << std::endl;
+                }
+                terrain[j].push_back(TerrainTile{id, Coord{x_coord, y_coord}, Tile{up, right, down, left}});
+
+            }
+        }
+        std::cout << "Current coord: " << current_coord.x << "," << current_coord.y << std::endl;
+        std::cout << "Creating an infinite terrain of " << 2 * terrain_width  + 1<< "X" << 2 * terrain_height + 1<< std::endl;
+        for(int j = 2 * terrain_height; j >= 0; j--){
+            for(int i = 0; i < (2 * terrain_width + 1); i++){
+                std::cout << terrain[j][i].id << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "Coords: " << std::endl;
+        for(int j = 2 * terrain_height; j >= 0; j--){
+            for(int i = 0; i < (2 * terrain_width + 1); i++){
+                std::cout << terrain[j][i].coord.x << "," << terrain[j][i].coord.y << "\t";
+            }
+            std::cout << std::endl;
         }
     }
     void create_maze() {
@@ -304,7 +381,45 @@ public:
     
         }
         ImGui::Checkbox("Use material from .mtl if no texture", &m_useMaterial);
+        ImGui::Checkbox("Show light options", &showLightOptions);
         ImGui::Separator();
+        if(showLightOptions) {
+            ImGui::Text("Lights");
+
+            if (ImGui::Button("Create Light")) {
+                selectedLightIndex = lightPositions.size();
+                lightPositions.emplace_back(-1.0, 0.0, 0.0);
+                lightColors.emplace_back(1.0f, 1.0f, 1.0f);
+            }
+
+            // Button for clearing lights
+            if (ImGui::Button("Reset Lights")) {
+                lightPositions.clear();
+                lightPositions.emplace_back(1.0f, 1.0f, 1.0f);
+                lightColors.clear();
+                lightColors.emplace_back(1.0f, 1.0f, 1.0f);
+            }
+
+            std::vector<std::string> itemStrings = {};
+            for (size_t i = 0; i < lightPositions.size(); i++) {
+                auto string = "Light " + std::to_string(i);
+                itemStrings.push_back(string);
+            }
+
+            std::vector<const char*> itemCStrings = {};
+            for (const auto& string : itemStrings) {
+                itemCStrings.push_back(string.c_str());
+            }
+
+            int tempSelectedItem = static_cast<int>(selectedLightIndex);
+            if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
+                selectedLightIndex = static_cast<size_t>(tempSelectedItem);
+            }
+
+            ImGui::DragFloat3("Position", &lightPositions[selectedLightIndex].x, 0.05f, -100.0f, 100.0f);
+            ImGui::ColorEdit3("Color", &lightColors[selectedLightIndex].x);
+            ImGui::Separator();
+        }
         switch(currentScene) {
             case 0:
                 ImGui::TextWrapped("This is the first scene. You can use the '1', '2' and '3' keys to switch between camera modes.");
@@ -377,6 +492,10 @@ public:
                 ImGui::SameLine();
                 if (ImGui::Button("Infinite Terrain")) {
                     wang_tile_mode = 1;
+                    current_coord = get_tile_coord();
+                    terrain_width = 3;
+                    terrain_height = 3;
+                    create_infinite_terrain();
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Maze")) {
@@ -388,6 +507,18 @@ public:
                 }
                 else if (wang_tile_mode == 1) {
                     ImGui::TextWrapped("Infinite terrain!");
+                    ImGui::TextWrapped("Adjust the dimensions of the terrain");
+                    ImGui::InputInt("Width", &t_terrain_width);
+                    ImGui::InputInt("Height", &t_terrain_height);
+                    if(ImGui::Button("Adjust terrain")) {
+                        if (t_terrain_width > 0 && t_terrain_height > 0) {
+                            terrain_width = t_terrain_width;
+                            terrain_height = t_terrain_height;
+                            current_coord = get_tile_coord();
+                            create_infinite_terrain();
+                        }
+                    }
+                    ImGui::TextWrapped("Current Position: %i, %i", current_coord.x, current_coord.y);
                 }
                 else {
                     ImGui::TextWrapped("Displaying the maze. Please adjust the width and height");
@@ -398,6 +529,7 @@ public:
                         if (t_maze_width > 0 && t_maze_height > 0) {
                             maze_width = t_maze_width;
                             maze_height = t_maze_height;
+                            
                             create_maze();
                         }
                     }
@@ -420,42 +552,7 @@ public:
                 ImGui::TextWrapped("Default Scene");
                 break;
         }
-        ImGui::Separator();
-
-        ImGui::Text("Lights");
-
-        if (ImGui::Button("Create Light")) {
-            selectedLightIndex = lightPositions.size();
-            lightPositions.emplace_back(-1.0, 0.0, 0.0);
-            lightColors.emplace_back(1.0f, 1.0f, 1.0f);
-        }
-
-        // Button for clearing lights
-        if (ImGui::Button("Reset Lights")) {
-            lightPositions.clear();
-            lightPositions.emplace_back(1.0f, 1.0f, 1.0f);
-            lightColors.clear();
-            lightColors.emplace_back(1.0f, 1.0f, 1.0f);
-        }
-
-        std::vector<std::string> itemStrings = {};
-        for (size_t i = 0; i < lightPositions.size(); i++) {
-            auto string = "Light " + std::to_string(i);
-            itemStrings.push_back(string);
-        }
-
-        std::vector<const char*> itemCStrings = {};
-        for (const auto& string : itemStrings) {
-            itemCStrings.push_back(string.c_str());
-        }
-
-        int tempSelectedItem = static_cast<int>(selectedLightIndex);
-        if (ImGui::ListBox("Lights", &tempSelectedItem, itemCStrings.data(), (int)itemCStrings.size(), 4)) {
-            selectedLightIndex = static_cast<size_t>(tempSelectedItem);
-        }
-
-        ImGui::DragFloat3("Position", &lightPositions[selectedLightIndex].x, 0.05f, -100.0f, 100.0f);
-        ImGui::ColorEdit3("Color", &lightColors[selectedLightIndex].x);
+       
 
         ImGui::End();
     }
@@ -726,7 +823,133 @@ public:
 
                     }
                     else if(wang_tile_mode == 1) {
+                        // std::cout << "Camera Pos: " << cameraPos.x << "," << cameraPos.z << std::endl;
+                        Coord new_coord = get_tile_coord();
+                        // std::cout << "Current Coord: " << current_coord.x << "," << current_coord.y << std::endl;
+                        // std::cout << "__________________________________" << std::endl;
+                        if (new_coord.x != current_coord.x || new_coord.y != current_coord.y) {
+                            std::random_device rd;
+                            std::mt19937 gen(rd());
+                            std::vector<std::vector<TerrainTile>> temp = terrain;
+                            //Move right
+                            if(new_coord.x < current_coord.x) {
+                                for(int j = 0; j < 2 * terrain_height + 1; j++) {
+                                    for(int i = 0; i < 2 * terrain_width + 1; i++) {
+                                        if(i < 2 * terrain_width){
+                                            temp[j][i] = terrain[j][i + 1];
+                                        }else{
+                                            int l = temp[j][i].tile.right;
+                                            int d = (j > 0) ? temp[j - 1][i].tile.up : -1;
+                                            int r = -1;
+                                            int u = -1;
+                                            std::vector<int> possible = get_possible_tiles(u, r, d, l);
+                                            std::uniform_int_distribution<int> dis(0, possible.size() - 1);
+                                            int index = possible[dis(gen)];
+                                            u = full_tileset[index].up;
+                                            r = full_tileset[index].right;
+                                            d = full_tileset[index].down;
+                                            l = full_tileset[index].left;
+
+                                            TerrainTile t{index, Coord{temp[j][i-1].coord.x - 1, temp[j][i].coord.y}, Tile{u,r,d,l}}; 
+                                            temp[j][i] = t;
+                                        }
+                                    }
+                                }
+                            }    
+                            //Move left
+                            else if(new_coord.x > current_coord.x) {
+                                for(int j = 0; j < 2 * terrain_height + 1; j++) {
+                                    for(int i = 2 * terrain_width; i >= 0; i--) {
+                                        if(i > 0){
+                                            temp[j][i] = terrain[j][i - 1];
+                                        }else{
+                                            int u = -1;
+                                            int r = temp[j][i].tile.left;
+                                            int d = (j > 0) ? temp[j - 1][i].tile.up : -1;
+                                            int l = -1;
+                                            std::vector<int> possible = get_possible_tiles(u, r, d, l);
+                                            std::uniform_int_distribution<int> dis(0, possible.size() - 1);
+                                            int index = possible[dis(gen)];
+                                            u = full_tileset[index].up;
+                                            r = full_tileset[index].right;
+                                            d = full_tileset[index].down;                                            
+                                            l = full_tileset[index].left;
+                                            TerrainTile t{index, Coord{temp[j][i+1].coord.x + 1, temp[j][i].coord.y}, Tile{u,r,d,l}}; 
+                                            temp[j][i] = t;
+                                        }
+                                    }
+                                }
+                            }
+                            //Move Down
+                            else if(new_coord.y < current_coord.y) {
+                                for(int j = 2 * terrain_height; j >= 0; j--) {
+                                    for(int i = 0; i < 2 * terrain_width + 1; i++) {
+                                        if(j > 0){
+                                            temp[j][i] = terrain[j - 1][i];
+                                        }else{
+                                            int u = temp[j][i].tile.down;
+                                            int r = -1;
+                                            int d = -1;
+                                            int l = (i > 0) ? temp[j][i - 1].tile.left : -1;
+                                            std::vector<int> possible = get_possible_tiles(u, r, d, l);
+                                            std::uniform_int_distribution<int> dis(0, possible.size() - 1);
+                                            int index = possible[dis(gen)];
+                                            u = full_tileset[index].up;
+                                            r = full_tileset[index].right;                                            
+                                            d = full_tileset[index].down;
+                                            l = full_tileset[index].left;
+                                            TerrainTile t{index, Coord{temp[j][i].coord.x, temp[j + 1][i].coord.y - 1}, Tile{u,r,d,l}};
+                                            temp[j][i] = t;
+                                        }
+                                    }
+                                }
+                            }else{
+                                for(int j = 0; j < 2 * terrain_height + 1; j++) {
+                                    for(int i = 0; i < 2 * terrain_width + 1; i++) {
+                                        if(j < 2 * terrain_height){
+                                            temp[j][i] = terrain[j + 1][i];
+                                        }else{
+                                            int u = -1;
+                                            int r = -1;
+                                            int d =  temp[j][i].tile.up;
+                                            int l = (i > 0) ? temp[j][i - 1].tile.left : -1;
+                                            std::vector<int> possible = get_possible_tiles(u, r, d, l);
+                                            std::uniform_int_distribution<int> dis(0, possible.size() - 1);
+                                            int index = possible[dis(gen)];
+                                            u = full_tileset[index].up;
+                                            r = full_tileset[index].right;
+                                            d = full_tileset[index].down;
+                                            l = full_tileset[index].left;
+                                            TerrainTile t{index, Coord{temp[j][i].coord.x, temp[j - 1][i].coord.y + 1}, Tile{u,r,d,l}};
+                                            temp[j][i] = t;
+                                        }
+                                    }
+                                }
+                            }
+                            terrain = temp;
+                        }
                         
+                        current_coord = new_coord;
+                        for(int j = 0; j < terrain_height; j++) {
+                            for(int i = 0; i < terrain_width; i++) {
+                                int k = terrain[j][i].id;
+                                int new_x = terrain[j][i].coord.x - i ;
+                                int new_z = terrain[j][i].coord.y + j ;
+                                glm::vec3 newPos =  glm::vec3(new_x,0.0f,new_z);
+                                glm::mat4 tile_model = glm::translate(glm::mat4(1.0f), newPos);
+                                glm::mat4 mvp = m_projectionMatrix * m_viewMatrix * tile_model;
+                                glm::mat3 nModel = glm::inverseTranspose(glm::mat3(tile_model));
+                                for (GPUMesh& m : full_tileset[k].mesh) {
+                                    m_solarShader.bind();
+                                    glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
+                                    glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel)); 
+                                    glUniform4f(m_solarShader.getUniformLocation("theColor"), 1.0f, 1.0f, 0.0f, 1.0f);
+                                    glUniform3f(m_solarShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
+                                    m.draw_no_mat(m_solarShader);
+                                }
+                            }
+                        }
+
                     }
                     else{
                         for(int j = 0; j < maze_height; j++) {
@@ -1009,6 +1232,7 @@ private:
     //ImGui Stuff
     bool triggered{ false };
     int currentScene = 0;
+    bool showLightOptions { true };
 
 
   
@@ -1031,6 +1255,10 @@ private:
     int t_maze_width = 0;
     int t_maze_height = 0;
     std::vector<std::vector<int>> maze;
+    std::vector<std::vector<TerrainTile>> terrain;
+    int terrain_width, terrain_height, t_terrain_width, t_terrain_height;
+    Coord current_coord;
+    float terrain_epsilon = 0.02f;
 };
 
 int main()
