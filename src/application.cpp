@@ -589,7 +589,7 @@ public:
             case 1:
                 ImGui::TextWrapped("Displaying Solar System. Use the options to change the parameters");
                 ImGui::SliderFloat3("Sun Position", &sun_pos.x, -10.0f, 10.0f);
-                ImGui::SliderFloat("Sun Radius", &sun_size, 0.2f, 3.0f);
+                ImGui::SliderFloat("Sun Radius", &sun_size, 0.2f, 2.0f);
                 ImGui::ColorPicker3("Sun Color", &sun_color.x);
                 ImGui::Separator();
                 if (ImGui::Button("Add Planet")) {

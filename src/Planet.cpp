@@ -13,7 +13,7 @@ glm::mat4 Planet::GetModel(glm::mat4 parent, float ts, int index, float parent_r
 	float new_theta = glm::radians(theta_init + speed * ts);
 	float new_phi = glm::radians(phi_init + speed * ts);
 	//std::cout << "Theta: " << new_theta << " Phi: " << new_phi << std::endl;
-	float rho = (1 + index) * parent_radius;
+	float rho = (3 + index) * parent_radius;
 	float y = rho * cos(new_phi);
 	float r = rho * sin(new_phi);
 	float x = r * cos(new_theta);
