@@ -874,7 +874,7 @@ public:
                         mesh.draw_no_mat(m_solarShader);
                         for (int i = 0; i < planets.size(); i++) {
                             Planet p = planets[i];
-                            glm::mat4 p_model = p.GetModel(sun_model, solar_system_ts, i);
+                            glm::mat4 p_model = p.GetModel(sun_model, solar_system_ts, i, sun_size, sun_pos);
                             mvp = m_projectionMatrix * m_viewMatrix * p_model;
                             nModel = glm::inverseTranspose(glm::mat3(p_model));
                             glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));

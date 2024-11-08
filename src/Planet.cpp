@@ -8,12 +8,12 @@ Planet::Planet(float pRadius, float pTRadius, float pThInit, float pPhInit, floa
 	color = pColor;
 
 }
-glm::mat4 Planet::GetModel(glm::mat4 parent, float ts, int index) {
+glm::mat4 Planet::GetModel(glm::mat4 parent, float ts, int index, float parent_radius, glm::vec3 par_pos) {
 	glm::mat4 model = glm::mat4(1.0f);
 	float new_theta = glm::radians(theta_init + speed * ts);
 	float new_phi = glm::radians(phi_init + speed * ts);
 	//std::cout << "Theta: " << new_theta << " Phi: " << new_phi << std::endl;
-	float rho = traslation_radius + index;
+	float rho = (1 + index) * parent_radius;
 	float y = rho * cos(new_phi);
 	float r = rho * sin(new_phi);
 	float x = r * cos(new_theta);
@@ -24,7 +24,7 @@ glm::mat4 Planet::GetModel(glm::mat4 parent, float ts, int index) {
 	//std::cout << "X: " << x << " Y: " << y << " Z: " << z << std::endl;
 	model = glm::translate(model, glm::vec3(x, y, z));
 	model = glm::scale(model, glm::vec3(radius));
-	return model * parent;
+	return  glm::translate(model, par_pos);
 }
 
 void Planet::CreateMoon() {
