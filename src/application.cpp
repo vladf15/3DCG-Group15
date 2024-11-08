@@ -81,6 +81,7 @@ public:
         branch_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/branch.obj");
         //Solar system initialization
         ss_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/sphere.obj");
+        water_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/water.obj");
         solar_system_ts = 0.0f;
         bread = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/bread/3DBread012_HQ-2K-PNG.obj");
 
@@ -167,6 +168,11 @@ public:
             ssBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/ss_vert.glsl");
             ssBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/ss_frag.glsl");
             m_solarShader = ssBuilder.build();
+
+            ShaderBuilder waterBuilder;
+            waterBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/water_vert.glsl");
+            waterBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/water_frag.glsl");
+            waterShader = waterBuilder.build();
 
             ShaderBuilder pbrBuilder; 
             pbrBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/pbr_vert.glsl");
@@ -592,10 +598,18 @@ public:
                 if(!random_rotation) ImGui::SliderFloat("Set the branch angle (horizontal)", &branch_rotation, 0.0f, 180.0f);
                 ImGui::Separator();
 
-
                 break;
             case 4:
                 ImGui::TextWrapped("Displaying Procedural water surface");
+                ImGui::InputFloat("Animation Time", &max_wave_time);
+                if(ImGui::Button("Start animation")) {
+                    if(!water_enabled) {
+                        water_ts = 0.1f;
+                        water_enabled = true;
+                    }else{
+                        water_ts = -1.0f;
+                    }
+                }
                 break;
             case 5:
                 ImGui::TextWrapped("Displaying Inverse Kinematics Animation");
@@ -620,11 +634,17 @@ public:
 
     void update()
     {
+
+        
+        auto t1 = std::chrono::high_resolution_clock::now();
         while (!m_window.shouldClose()) {
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
-
+            auto t2 = std::chrono::high_resolution_clock::now();
+            float deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(t2 - t1).count();
+            t1 = t2;
+            std::cout << "deltaTime: " << std::to_string(deltaTime) << std::endl;
           
             //animation code
             if (inAnimation) {
@@ -1074,6 +1094,26 @@ public:
                     break;
                 }
                 case 4:
+                    waterShader.bind();
+                    glm::mat4 water_model = glm::mat4(1.0f);
+                    glm::mat4 mvp_wtr = m_projectionMatrix * m_viewMatrix * water_model;
+                    glm::mat3 nModel_wtr = glm::inverseTranspose(glm::mat3(water_model));
+                    for (GPUMesh& m : water_mesh) {
+                        glUniformMatrix4fv(waterShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp_wtr));
+                        glUniformMatrix3fv(waterShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel_wtr));
+                        glUniform3f(waterShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
+                        glUniform1f(waterShader.getUniformLocation("ts"), water_ts);
+                        glUniform4f(waterShader.getUniformLocation("theColor"), 0.0f, 0.0f, 1.0f, 1.0f);
+                        m.draw_no_mat(waterShader);
+                    }
+                    if(water_enabled){
+                        //water_ts += 0.1f;
+                        water_ts += deltaTime;
+                        if(water_ts > max_wave_time){
+                            water_ts = -1.0f;
+                            water_enabled = false;
+                        }
+                    }
                     break;
                 case 5:
                     break;
@@ -1297,6 +1337,7 @@ private:
     bool usePbr{ false };
     Shader m_pbrShader;
     Shader advancedPbrShader;
+    Shader waterShader;
 
     bool useNormalMap{ true };
     bool editableMaterial{ true };
@@ -1418,6 +1459,13 @@ private:
     bool random_inclination = false;
     bool random_rotation = false;
 
+
+    //Water
+
+    std::vector<GPUMesh> water_mesh;
+    float water_ts = 0.0f;
+    bool water_enabled = false;
+    float max_wave_time = 10.0f;
 };
 
 int main()
