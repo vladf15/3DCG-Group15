@@ -24,6 +24,50 @@ GPUMesh::GPUMesh(const Mesh& cpuMesh)
     // Figure out if this mesh has texture coordinates
     m_hasTextureCoords = static_cast<bool>(cpuMesh.material.kdTexture);
 
+    // Make tangents and bitangents for each vertex https://learnopengl.com/Advanced-Lighting/Normal-Mapping
+    std::vector<GPUVertex> gpuVertices;
+    for (int i = 0; i < cpuMesh.vertices.size(); i++) {
+        glm::vec3 t{ 0.0f };
+        glm::vec3 b{ 0.0f };
+        Vertex p = cpuMesh.vertices[i];
+        if (m_hasTextureCoords) {
+            int i1, i2;
+            for (int j = 0; j < cpuMesh.triangles.size(); j++) {
+                if (cpuMesh.triangles[j].x) {
+                    i1 = cpuMesh.triangles[j].y;
+                    i2 = cpuMesh.triangles[j].z;
+                }
+                else if (cpuMesh.triangles[j].y) {
+                    i1 = cpuMesh.triangles[j].x;
+                    i2 = cpuMesh.triangles[j].z;
+                }
+                else if (cpuMesh.triangles[j].z) {
+                    i1 = cpuMesh.triangles[j].x;
+                    i2 = cpuMesh.triangles[j].y;
+                }
+            }
+            Vertex p1 = cpuMesh.vertices[i1];
+            Vertex p2 = cpuMesh.vertices[i2];
+
+            glm::vec3 e1 = p1.position - p.position;
+            glm::vec3 e2 = p2.position - p.position;
+
+            glm::vec2 duv1 = p1.texCoord - p.texCoord;
+            glm::vec2 duv2 = p2.texCoord - p.texCoord;
+
+            glm::mat2x3 eMat{ e1, e2 };
+            glm::mat2 uvMat{ glm::vec2{ duv2.y, -duv2.x }, glm::vec2{ -duv1.y, duv1.x } };
+
+            glm::mat2x3 tbMat = glm::transpose(uvMat * glm::transpose(eMat));
+
+            t = tbMat[0];
+            b = tbMat[1];
+
+        }
+        
+        gpuVertices.emplace_back(p.position, p.normal, p.texCoord, t, b);
+    }
+
     // Create VAO and bind it so subsequent creations of VBO and IBO are bound to this VAO
     glGenVertexArrays(1, &m_vao);
     glBindVertexArray(m_vao);
@@ -31,7 +75,7 @@ GPUMesh::GPUMesh(const Mesh& cpuMesh)
     // Create vertex buffer object (VBO)
     glGenBuffers(1, &m_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(cpuMesh.vertices.size() * sizeof(decltype(cpuMesh.vertices)::value_type)), cpuMesh.vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(gpuVertices.size() * sizeof(decltype(gpuVertices)::value_type)), gpuVertices.data(), GL_STATIC_DRAW);
 
     // Create index buffer object (IBO)
     glGenBuffers(1, &m_ibo);
@@ -42,14 +86,20 @@ GPUMesh::GPUMesh(const Mesh& cpuMesh)
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
+    glEnableVertexAttribArray(4);
     // We tell OpenGL what each vertex looks like and how they are mapped to the shader (location = ...).
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, position));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, normal));
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, texCoord));
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, tangent));
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, bitangent));
     // Reuse all attributes for each instance
     glVertexAttribDivisor(0, 0);
     glVertexAttribDivisor(1, 0);
     glVertexAttribDivisor(2, 0);
+    glVertexAttribDivisor(3, 0);
+    glVertexAttribDivisor(4, 0);
 
     // Each triangle has 3 vertices.
     m_numIndices = static_cast<GLsizei>(3 * cpuMesh.triangles.size());

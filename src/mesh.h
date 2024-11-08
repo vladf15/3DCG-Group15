@@ -25,6 +25,14 @@ struct GPUMaterial {
 	float opacity{ 1.0f };
 };
 
+struct GPUVertex {
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec2 texCoord; // Texture coordinate
+    glm::vec3 tangent;
+    glm::vec3 bitangent;
+};
+
 class GPUMesh {
 public:
     GPUMesh(const Mesh& cpuMesh);
