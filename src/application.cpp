@@ -471,7 +471,7 @@ public:
     void create_planet() {
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_real_distribution<> pRadiusDistr(0.4f, 0.75f);
+        std::uniform_real_distribution<> pRadiusDistr(0.2f, 0.3f);
         std::uniform_real_distribution<> thetaInitDistr(0.0f, 2 * acos(-1.0f));
         std::uniform_real_distribution<> phiInitDistr(0.0f, 180);
         std::uniform_real_distribution<> spdDistr(0.5f, 2.0f);
