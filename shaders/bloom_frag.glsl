@@ -36,9 +36,9 @@ void main()
 			result += weight * texture(bloomTexture, fragTexCoord + vec2(0.0, float(i) / height)).rgb / weightSum;
 		}
 	}
+	result = bloomIntensity * result;
 	if (finalPass) {
 		result += texture(sceneTexture, fragTexCoord).rgb;
 	}
 	fragColor = vec4(result, 1.0);
-	//fragColor = texture(bloomTexture, fragTexCoord);
 }

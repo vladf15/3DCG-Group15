@@ -262,6 +262,12 @@ public:
 				ImGui::Checkbox("Use Bloom", &useBloom);
 				ImGui::Checkbox("Use Depth of Field", &useDoF);
                 ImGui::Checkbox("Show Particle Effects", &useParticles);
+                if (useBloom) {
+					ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.0f, 1.0f);
+					ImGui::SliderInt("Bloom Radius", &bloomRadius, 1.0f, 20.0f);
+                    ImGui::SliderInt("Bloom Passes", &bloomPasses, 1, 10);
+					ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 1.0f);
+                }
                 if (usePbr) {
                     ImGui::Checkbox("Editable material parameters", &editableMaterial);
                     if (editableMaterial) {
@@ -501,6 +507,8 @@ public:
                             glUniform1i(m_pbrShader.getUniformLocation("num_lights"), lightPositions.size());
                             glUniform3fv(m_pbrShader.getUniformLocation("lightPositions"), lightPositions.size(), glm::value_ptr(lightPositions[0]));
                             glUniform3fv(m_pbrShader.getUniformLocation("lightColors"), lightColors.size(), glm::value_ptr(lightColors[0]));
+                            // Bloom threshold
+							glUniform1f(m_pbrShader.getUniformLocation("bloomThreshold"), bloomThreshold);
 
                             glUniform1i(m_pbrShader.getUniformLocation("hasTexCoords"), static_cast<int>(mesh.hasTextureCoords()));
                             if (mesh.hasTextureCoords()) {
@@ -933,7 +941,8 @@ private:
 	bool useDoF{ false };
     int bloomPasses{ 5 };
     int bloomRadius{ 5 };
-    float bloomIntensity{ 0.1f };
+    float bloomIntensity{ 1.0f };
+	float bloomThreshold{ 1.0f };
     GLuint postProcessingVAO, postProcessingVBO;
 	GLuint sceneBuffer; //original output
 	GLuint postProcessingBuffer; //extracted intense regions for bloom

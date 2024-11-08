@@ -27,6 +27,8 @@ uniform int num_lights;
 uniform vec3 lightPositions[32];
 uniform vec3 lightColors[32];
 
+uniform float bloomThreshold;
+
 in vec3 fragPosition;
 in vec3 fragNormal;
 in vec2 fragTexCoord;
@@ -90,7 +92,7 @@ void main()
     //extract bright areas for bloom
     vec3 luminance = vec3(0.2126, 0.7152, 0.0722);
 	float brightness = dot(luminance, fragColor.rgb);
-	if (brightness > 0.85) {
+	if (brightness > bloomThreshold) {
 		bloomColor = vec4(fragColor.rgb, 1);
 	}
 	else {
