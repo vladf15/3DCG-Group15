@@ -84,6 +84,7 @@ public:
         water_mesh = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/water.obj");
         solar_system_ts = 0.0f;
         bread = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/bread/3DBread012_HQ-2K-PNG.obj");
+        stone = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/Stone/surface.obj");
 
         ////////////////
         //PARTICLE SETUP
@@ -96,8 +97,6 @@ public:
             p.size = 0.4f;
 			particles.push_back(p);
 		}
-        pbrMeshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/Stone/surface.obj");
-        //pbrMeshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/bread/3DBread012_HQ-2K-PNG.obj");
         
 
         //wang tiles initialization
@@ -623,16 +622,23 @@ public:
                     }
                 }
                 break;
-            case 5:
-                ImGui::TextWrapped("Displaying Inverse Kinematics Animation");
-                ImGui::TextWrapped("NOT IMPLEMENTED, GO TO NEXT SCENE");
-                break;
-            case 6: 
-                ImGui::TextWrapped("Displaying PBR shading with normal mapping and ambient occlusion mapping");
+            
+            case 5: 
+                ImGui::TextWrapped("Displaying PBR shading on a bread roll with normal mapping and ambient occlusion mapping");
                 ImGui::Checkbox("Use normal map", &useNormalMap);
                 ImGui::ColorEdit3("Specular color (albedo)", &albedo.x);
                 ImGui::DragFloat("Metallic", &metallic, 0.01f, 0.0f, 1.0f);
                 ImGui::DragFloat("Roughness", &roughness, 0.01f, 0.0f, 1.0f);
+                break;
+
+            case 6:
+                ImGui::TextWrapped("Displaying stone material on a quad with displacement map and roughness map (and also all that the bread had)");
+                ImGui::Checkbox("Use normal map", &useNormalMap);
+                ImGui::Checkbox("Use displacement map", &useDisplacementMap);
+                ImGui::Checkbox("Use roughness map", &useRoughnessMap);
+                if (!useRoughnessMap) ImGui::DragFloat("Roughness", &roughness, 0.01f, 0.0f, 1.0f);
+                ImGui::ColorEdit3("Specular color (albedo)", &albedo.x);
+                ImGui::DragFloat("Metallic", &metallic, 0.01f, 0.0f, 1.0f);
                 break;
             default:
                 ImGui::TextWrapped("Default Scene");
@@ -1144,9 +1150,7 @@ public:
                         }
                     }
                     break;
-                case 5:
-                    break;
-                case 6: 
+                case 5: 
                     for (GPUMesh& mesh : bread) {
                         advancedPbrShader.bind();
                         glUniformMatrix4fv(advancedPbrShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
@@ -1156,6 +1160,8 @@ public:
 
                         glUniform1i(advancedPbrShader.getUniformLocation("useMaterial"), static_cast<int>(m_useMaterial));
                         glUniform1i(advancedPbrShader.getUniformLocation("useNormalMap"), static_cast<int>(useNormalMap));
+                        glUniform1i(advancedPbrShader.getUniformLocation("useDisplacementMap"), GL_FALSE);
+                        glUniform1i(advancedPbrShader.getUniformLocation("useRoughnessMap"), GL_FALSE);
 
                         // Pass PBR parameters
                         glUniform1f(advancedPbrShader.getUniformLocation("metallic"), metallic);
@@ -1177,18 +1183,51 @@ public:
                             glUniform1i(advancedPbrShader.getUniformLocation("normalMap"), 1);
                             breadOcclusion.bind(GL_TEXTURE2);
                             glUniform1i(advancedPbrShader.getUniformLocation("kaMap"), 2);
-                            /*displacementTexture.bind(GL_TEXTURE3);
-                            glUniform1i(m_pbrShader.getUniformLocation("displacementMap"), 3);
-                            
-                            
-                            roughnessTexture.bind(GL_TEXTURE4);
-                            glUniform1i(m_pbrShader.getUniformLocation("roughnessMap"), 4);*/
                         }
                         mesh.draw(advancedPbrShader);
                     }
 
                     break;
-                case 7:
+                case 6:
+                    for (GPUMesh& mesh : stone) {
+                        advancedPbrShader.bind();
+                        glUniformMatrix4fv(advancedPbrShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+                        glUniformMatrix4fv(advancedPbrShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
+                        glUniformMatrix3fv(advancedPbrShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
+                        glUniform3fv(advancedPbrShader.getUniformLocation("cameraPos"), 1, glm::value_ptr(cameraPos));
+
+                        glUniform1i(advancedPbrShader.getUniformLocation("useMaterial"), static_cast<int>(m_useMaterial));
+                        glUniform1i(advancedPbrShader.getUniformLocation("useNormalMap"), static_cast<int>(useNormalMap));
+                        glUniform1i(advancedPbrShader.getUniformLocation("useDisplacementMap"), static_cast<int>(useDisplacementMap));
+                        glUniform1i(advancedPbrShader.getUniformLocation("useRoughnessMap"), static_cast<int>(useRoughnessMap));
+
+                        // Pass PBR parameters
+                        glUniform1f(advancedPbrShader.getUniformLocation("metallic"), metallic);
+                        glUniform1f(advancedPbrShader.getUniformLocation("roughness"), roughness);
+                        glUniform3fv(advancedPbrShader.getUniformLocation("albedo"), 1, glm::value_ptr(albedo));
+                        glUniform1i(advancedPbrShader.getUniformLocation("overrideBase"), static_cast<int>(editableMaterial));
+                        glUniform3fv(advancedPbrShader.getUniformLocation("baseColor"), 1, glm::value_ptr(baseColor));
+
+                        // Pass lights
+                        glUniform1i(advancedPbrShader.getUniformLocation("num_lights"), lightPositions.size());
+                        glUniform3fv(advancedPbrShader.getUniformLocation("lightPositions"), lightPositions.size(), glm::value_ptr(lightPositions[0]));
+                        glUniform3fv(advancedPbrShader.getUniformLocation("lightColors"), lightColors.size(), glm::value_ptr(lightColors[0]));
+
+                        glUniform1i(advancedPbrShader.getUniformLocation("hasTexCoords"), static_cast<int>(mesh.hasTextureCoords()));
+                        if (mesh.hasTextureCoords()) {
+                            kdTexture.bind(GL_TEXTURE0);
+                            glUniform1i(advancedPbrShader.getUniformLocation("colorMap"), 0);
+                            normalTexture.bind(GL_TEXTURE1);
+                            glUniform1i(advancedPbrShader.getUniformLocation("normalMap"), 1);
+                            kaTexture.bind(GL_TEXTURE2);
+                            glUniform1i(advancedPbrShader.getUniformLocation("kaMap"), 2);
+                            displacementTexture.bind(GL_TEXTURE3);
+                            glUniform1i(m_pbrShader.getUniformLocation("displacementMap"), 3);
+                            roughnessTexture.bind(GL_TEXTURE4);
+                            glUniform1i(m_pbrShader.getUniformLocation("roughnessMap"), 4);
+                        }
+                        mesh.draw(advancedPbrShader);
+                    }
                     break;
                 default:
                     break;
@@ -1372,18 +1411,21 @@ private:
 
     bool useNormalMap{ true };
     bool editableMaterial{ true };
+    bool useDisplacementMap{ true };
+    bool useRoughnessMap{ true };
     glm::vec3 baseColor{ 0.0f, 1.0f, 0.5f };
     glm::vec3 albedo{ 1.0f, 0.5f, 0.0f };
     
     float metallic{ 0.0f };
     float roughness{ 0.3f };
 
+    // stone
     Texture kaTexture;
     Texture kdTexture;
     Texture normalTexture;
     Texture roughnessTexture;
     Texture displacementTexture;
-    std::vector<GPUMesh> pbrMeshes;
+    std::vector<GPUMesh> stone;
 
     // bread
     std::vector<GPUMesh> bread;

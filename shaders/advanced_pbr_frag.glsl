@@ -12,6 +12,7 @@ uniform sampler2D colorMap;
 uniform bool hasTexCoords;
 uniform bool useMaterial;
 uniform bool useNormalMap;
+uniform bool useRoughnessMap;
 
 uniform float metallic;
 uniform float roughness;
@@ -80,13 +81,17 @@ void main()
     }
     
     vec3 diffuseBRDF = (1 - metallic) * fLambert / pi;
-    
+    float realRoughness = roughness;
+    if (useRoughnessMap) {
+        realRoughness = texture(roughnessMap, fragTexCoord).x;
+    }
+
     for (int i = 0; i < num_lights; i++) {
         vec3 light = normalize(lightPositions[i] - fragPosition);
         vec3 h = normalize(view + light);
         
-        float D = normalDistribution(normal, h, roughness);
-        float G = geometryFunction(normal, view, roughness);
+        float D = normalDistribution(normal, h, realRoughness);
+        float G = geometryFunction(normal, view, realRoughness);
         vec3 F = fresnel(view, h);
         vec3 specularBRDF = D * G * F;
         

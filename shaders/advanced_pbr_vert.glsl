@@ -6,6 +6,9 @@ uniform mat4 modelMatrix;
 // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
 uniform mat3 normalModelMatrix;
 
+uniform bool useDisplacementMap;
+uniform sampler2D displacementMap;
+
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 texCoords;
@@ -26,6 +29,10 @@ void main()
     mat2 uvMat = mat2(vec2(duv2.y, -duv2.x), vec2(-duv1.y, duv1.x));
     mat2x3 tbMat = transpose(uvMat * transpose(eMat));
 
+    vec3 realPos = pos;
+    if (useDisplacementMap) {
+        realPos += normal * texture(displacementMap, texCoords).x * 0.04; // 0.04 seems to look best 
+    }
     gl_Position = mvpMatrix * vec4(pos, 1.0);
     fragPosition = vec3(modelMatrix * vec4(pos, 1.0));
     fragTexCoord = texCoords;
