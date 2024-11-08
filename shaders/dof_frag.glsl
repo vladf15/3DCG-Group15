@@ -25,16 +25,16 @@ void main()
 	}
 	float depth = texture(depthTexture, fragTexCoord).r;
 	int dofRadius = int(abs(depth - focalLength) / focalRange);
-	if (dofRadius > 10)
-		dofRadius = 10;	
+	if (dofRadius > 15)
+		dofRadius = 15;	
 
 	for (int i = -dofRadius; i <= dofRadius; i++)
 	{
 		//sum of gaussian weights in one direction
-		if (horizontal && texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).r > depth + focalRange) {
+		if (horizontal && i != 0 && texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).r > depth + focalRange) {
 			weight = 0.0;
 		}
-		else if (!horizontal && texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).r > depth + focalRange) {
+		else if (!horizontal && i != 0 && texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).r > depth + focalRange) {
 			weight = 0.0;
 		}
 		else {
@@ -43,20 +43,20 @@ void main()
 		weightSum += weight;
 	}
 	if (weightSum == 0.0)
-		weightSum = 1.0;
+		weightSum = 0.001;
 
 	for (int i = -dofRadius; i <= dofRadius; i++)
 	{
 		//sum of gaussian weights in one direction
 		weight = exp(-(i * i) / (dofRadius * dofRadius * 2.0));
 		if (horizontal) {
-			if (texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).r < depth) {
+			if (i != 0 && texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).r > depth + focalRange) {
 				weight = 0.0;
 			}
 			result += weight * texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).rgb / weightSum;
 		}
 		else {
-			if (texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).r < depth) {
+			if (i != 0 && texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).r > depth + focalRange) {
 				weight = 0.0;
 			}
 			result += weight * texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).rgb / weightSum;
