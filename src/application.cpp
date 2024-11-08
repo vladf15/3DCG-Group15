@@ -130,6 +130,16 @@ public:
 		windowWidth = m_window.getWindowSize().x;
 		windowHeight = m_window.getWindowSize().y;
 
+        glGenTextures(1, &sceneDepthTexture);
+        glBindTexture(GL_TEXTURE_2D, sceneDepthTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, windowWidth, windowHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepthTexture, 0);
+
+
 		glGenTextures(1, &sceneColorTexture);
 		glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, windowWidth, windowHeight, 0, GL_RGBA, GL_FLOAT, NULL);
@@ -158,11 +168,6 @@ public:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-        glGenTextures(1, &sceneDepthTexture);
-		glBindTexture(GL_TEXTURE_2D, sceneDepthTexture);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, windowWidth, windowHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepthTexture, 0);
 
 		glGenFramebuffers(1, &postProcessingBuffer);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -572,8 +577,8 @@ public:
 					ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 1.0f);
                 }
 				if (useDoF) {
-					ImGui::SliderFloat("DoF Focal Length", &focalLength, focalRange, 10.0f);
-					ImGui::SliderFloat("DoF Focal Range", &focalRange, 0.5f, focalLength);
+					ImGui::SliderFloat("DoF Focal Length", &focalLength, focalRange, 1.0f);
+					ImGui::SliderFloat("DoF Focal Range", &focalRange, 0.05f, focalLength);
 				}
                 if (usePbr) {
                     ImGui::Checkbox("Editable material parameters", &editableMaterial);
