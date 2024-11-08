@@ -574,7 +574,7 @@ public:
                 }
 				if (useDoF) {
 					ImGui::SliderFloat("DoF Focal Length", &focalLength, focalRange, 1.0f);
-					ImGui::SliderFloat("DoF Focal Range", &focalRange, 0.05f, focalLength);
+					ImGui::SliderFloat("DoF Focal Range", &focalRange, 0.02f, focalLength);
 				}
                 if (usePbr) {
                     ImGui::Checkbox("Editable material parameters", &editableMaterial);
@@ -1672,8 +1672,8 @@ private:
     float bloomIntensity{ 1.0f };
 	float bloomThreshold{ 1.0f };
 
-	float focalLength{ 2.0f };
-    float focalRange{ 1.0f };
+	float focalLength{ 0.5f };
+    float focalRange{ 0.1f };
     GLuint postProcessingVAO, postProcessingVBO;
 	GLuint sceneBuffer; //original output
 	GLuint postProcessingBuffer; //extracted intense regions for bloom
