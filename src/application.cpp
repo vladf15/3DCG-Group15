@@ -254,6 +254,7 @@ public:
             advancedBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/advanced_pbr_vert.glsl");
             advancedBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/advanced_pbr_frag.glsl");
             advancedPbrShader = advancedBuilder.build();
+
 			ShaderBuilder bloomBuilder;
             bloomBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/blur_vert.glsl");
             bloomBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/bloom_frag.glsl");
