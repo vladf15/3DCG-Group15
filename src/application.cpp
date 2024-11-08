@@ -533,8 +533,8 @@ public:
             // Button for clearing lights
             if (ImGui::Button("Reset Lights")) {
                 lightPositions.clear();
-                lightPositions.emplace_back(1.0f, 1.0f, 1.0f);
                 lightColors.clear();
+                lightPositions.emplace_back(1.0f, 1.0f, 1.0f);
                 lightColors.emplace_back(1.0f, 1.0f, 1.0f);
             }
 
@@ -566,7 +566,7 @@ public:
 				ImGui::Checkbox("Use Depth of Field", &useDoF);
                 ImGui::Checkbox("Show Particle Effects", &useParticles);
                 if (useBloom) {
-					ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.0f, 1.0f);
+					ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.0f, 2.0f);
 					ImGui::SliderInt("Bloom Radius", &bloomRadius, 1.0f, 20.0f);
                     ImGui::SliderInt("Bloom Passes", &bloomPasses, 1, 10);
 					ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 1.0f);
