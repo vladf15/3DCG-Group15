@@ -36,20 +36,19 @@ void main()
 
 	for (int i = -dofRadius; i <= dofRadius; i++)
 	{
-			//sum of gaussian weights in one direction
-			weight = exp(-(i * i) / (dofRadius * dofRadius * 2.0));
-			if (horizontal) {
-				if (texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).r < depth) {
-					weight = 0.0;
-				}
-				result += weight * texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).rgb / weightSum;
+		//sum of gaussian weights in one direction
+		weight = exp(-(i * i) / (dofRadius * dofRadius * 2.0));
+		if (horizontal) {
+			if (texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).r < depth) {
+				weight = 0.0;
 			}
-			else {
-				if (texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).r < depth) {
-					weight = 0.0;
-				}
-				result += weight * texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).rgb / weightSum;
+			result += weight * texture(sceneTexture, fragTexCoord + vec2(float(i) / width, 0.0)).rgb / weightSum;
+		}
+		else {
+			if (texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).r < depth) {
+				weight = 0.0;
 			}
+			result += weight * texture(sceneTexture, fragTexCoord + vec2(0.0, float(i) / height)).rgb / weightSum;
 		}
 	}
 	result = clamp(result, 0.0, 1.0);
