@@ -35,6 +35,8 @@ layout(location = 0) out vec4 fragColor;
 
 float pi = 3.1415926535;
 
+// Calculations mostly based on https://www.youtube.com/watch?v=XK_p2MxGBQs 
+// Everything except for the interpretation of the metallic parameter is from there.
 float normalDistribution(vec3 normal, vec3 h, float a) {
     // according to Disney and Epic Games, we take a^4
     return (a * a * a * a) / (pi * pow(pow(dot(normal, h), 2) * (a * a * a * a - 1) + 1, 2));
