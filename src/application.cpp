@@ -400,6 +400,16 @@ public:
 //        ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
 //        ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
         ImGui::TextWrapped("Welcome, use WASD, Space and Lcontrol to move the camera.\n Left click + drag to change view direction.\n Use '1', '2' and '3' to switch between camera modes.\n Use the buttons to move through the scenes");
+        ImGui::SliderFloat("Camera Speed", &cameraSpeed, 0.01f, 0.5f);
+        ImGui::InputFloat("Camera FOV", &cam_fov);
+        ImGui::InputFloat("Camera near plane", &cam_near_plane);
+        ImGui::InputFloat("Camera far plane", &cam_far_plane);
+        ImGui::Checkbox("Orthogonal Camera?", &ortho);
+
+        if(ImGui::Button("Update Projection Matrix")) {
+            if(!ortho) m_projectionMatrix = glm::perspective(glm::radians(cam_fov), 1.0f, cam_near_plane, cam_far_plane);
+            else m_projectionMatrix = glm::ortho(-3.0f, 3.0f, -3.0f, 3.0f, cam_near_plane, cam_far_plane);
+        }
         if(ImGui::Button("Previous Scene")) {
             if (currentScene > 0) {
                 currentScene--;
@@ -1320,10 +1330,13 @@ private:
     bool m_useMaterial{ true };
 
 
-   
+    float cam_fov = 80.0f;
+    float cam_near_plane = 0.1f;
+    float cam_far_plane = 100.0f;
+    bool ortho = false;
 
     // Projection and view matrices for you to fill in and use
-    glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 300.0f);
+    glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(cam_fov), 1.0f, cam_near_plane, cam_far_plane);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
     glm::mat4 m_modelMatrix{ 1.0f };
 
