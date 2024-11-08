@@ -625,6 +625,7 @@ public:
                 break;
             case 5:
                 ImGui::TextWrapped("Displaying Inverse Kinematics Animation");
+                ImGui::TextWrapped("NOT IMPLEMENTED, GO TO NEXT SCENE");
                 break;
             case 6: 
                 ImGui::TextWrapped("Displaying PBR shading with normal mapping and ambient occlusion mapping");
@@ -740,6 +741,17 @@ public:
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
             switch (currentScene) {
                 case 0:
+                    waterShader.bind();
+                    glm::mat4 mat_model = glm::mat4(1.0f);
+                    glm::mat4 mvp_mat = m_projectionMatrix * m_viewMatrix * mat_model;
+                    glm::mat3 nModel_mat = glm::inverseTranspose(glm::mat3(mat_model));
+                    for (GPUMesh& m : water_mesh) {
+                        glUniformMatrix4fv(waterShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp_mat));
+                        glUniformMatrix3fv(waterShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel_mat));
+                        glUniform3f(waterShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
+                        glUniform4f(waterShader.getUniformLocation("theColor"), 0.0f, 0.0f, 1.0f, 1.0f);
+                        m.draw_no_mat(waterShader);
+                    }
                     for (GPUMesh& mesh : m_meshes) {
                         if (usePbr) {
                             m_pbrShader.bind();
@@ -1114,8 +1126,8 @@ public:
                         glUniformMatrix4fv(waterShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp_wtr));
                         glUniformMatrix3fv(waterShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel_wtr));
                         glUniform3f(waterShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
-                        glUniform1f(waterShader.getUniformLocation("ts"), water_ts);
                         glUniform4f(waterShader.getUniformLocation("theColor"), 0.0f, 0.0f, 1.0f, 1.0f);
+                        glUniform1f(waterShader.getUniformLocation("ts"), water_ts);
                         glUniform2f(waterShader.getUniformLocation("wave_center"),wave_center.x,wave_center.y);
                         glUniform1f(waterShader.getUniformLocation("wave_speed"),wave_speed);
                         glUniform1f(waterShader.getUniformLocation("lambda"),lambda);
