@@ -29,8 +29,10 @@ struct GPUVertex {
     glm::vec3 position;
     glm::vec3 normal;
     glm::vec2 texCoord; // Texture coordinate
-    glm::vec3 tangent;
-    glm::vec3 bitangent;
+    glm::vec3 e1;
+    glm::vec3 e2;
+    glm::vec2 duv1;
+    glm::vec2 duv2;
 };
 
 class GPUMesh {

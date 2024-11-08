@@ -27,45 +27,38 @@ GPUMesh::GPUMesh(const Mesh& cpuMesh)
     // Make tangents and bitangents for each vertex https://learnopengl.com/Advanced-Lighting/Normal-Mapping
     std::vector<GPUVertex> gpuVertices;
     for (int i = 0; i < cpuMesh.vertices.size(); i++) {
-        glm::vec3 t{ 0.0f };
-        glm::vec3 b{ 0.0f };
+        glm::vec3 e1{ 0.0f };
+        glm::vec3 e2{ 0.0f };
+        glm::vec2 duv1{ 0.0f };
+        glm::vec2 duv2{ 0.0f };
         Vertex p = cpuMesh.vertices[i];
         if (m_hasTextureCoords) {
             int i1, i2;
             for (int j = 0; j < cpuMesh.triangles.size(); j++) {
-                if (cpuMesh.triangles[j].x) {
+                if (cpuMesh.triangles[j].x == i) {
                     i1 = cpuMesh.triangles[j].y;
                     i2 = cpuMesh.triangles[j].z;
                 }
-                else if (cpuMesh.triangles[j].y) {
+                else if (cpuMesh.triangles[j].y == i) {
                     i1 = cpuMesh.triangles[j].x;
                     i2 = cpuMesh.triangles[j].z;
                 }
-                else if (cpuMesh.triangles[j].z) {
+                else if (cpuMesh.triangles[j].z == i) {
                     i1 = cpuMesh.triangles[j].x;
                     i2 = cpuMesh.triangles[j].y;
                 }
+                else continue;
+                break;
             }
-            Vertex p1 = cpuMesh.vertices[i1];
-            Vertex p2 = cpuMesh.vertices[i2];
+            e1 = cpuMesh.vertices[i1].position - p.position;
+            e2 = cpuMesh.vertices[i2].position - p.position;
 
-            glm::vec3 e1 = p1.position - p.position;
-            glm::vec3 e2 = p2.position - p.position;
-
-            glm::vec2 duv1 = p1.texCoord - p.texCoord;
-            glm::vec2 duv2 = p2.texCoord - p.texCoord;
-
-            glm::mat2x3 eMat{ e1, e2 };
-            glm::mat2 uvMat{ glm::vec2{ duv2.y, -duv2.x }, glm::vec2{ -duv1.y, duv1.x } };
-
-            glm::mat2x3 tbMat = glm::transpose(uvMat * glm::transpose(eMat));
-
-            t = tbMat[0];
-            b = tbMat[1];
+            duv1 = cpuMesh.vertices[i1].texCoord - p.texCoord;
+            duv2 = cpuMesh.vertices[i2].texCoord - p.texCoord;
 
         }
         
-        gpuVertices.emplace_back(p.position, p.normal, p.texCoord, t, b);
+        gpuVertices.emplace_back(p.position, p.normal, p.texCoord, e1, e2, duv1, duv2);
     }
 
     // Create VAO and bind it so subsequent creations of VBO and IBO are bound to this VAO
@@ -88,18 +81,24 @@ GPUMesh::GPUMesh(const Mesh& cpuMesh)
     glEnableVertexAttribArray(2);
     glEnableVertexAttribArray(3);
     glEnableVertexAttribArray(4);
+    glEnableVertexAttribArray(5);
+    glEnableVertexAttribArray(6);
     // We tell OpenGL what each vertex looks like and how they are mapped to the shader (location = ...).
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, position));
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, normal));
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, texCoord));
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, tangent));
-    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, bitangent));
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, e1));
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, e2));
+    glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, duv1));
+    glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, sizeof(GPUVertex), (void*)offsetof(GPUVertex, duv2));
     // Reuse all attributes for each instance
     glVertexAttribDivisor(0, 0);
     glVertexAttribDivisor(1, 0);
     glVertexAttribDivisor(2, 0);
     glVertexAttribDivisor(3, 0);
     glVertexAttribDivisor(4, 0);
+    glVertexAttribDivisor(5, 0);
+    glVertexAttribDivisor(6, 0);
 
     // Each triangle has 3 vertices.
     m_numIndices = static_cast<GLsizei>(3 * cpuMesh.triangles.size());
