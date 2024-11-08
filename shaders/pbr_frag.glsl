@@ -90,7 +90,7 @@ void main()
     //extract bright areas for bloom
     vec3 luminance = vec3(0.2126, 0.7152, 0.0722);
 	float brightness = dot(luminance, fragColor.rgb);
-	if (brightness > 1.0) {
+	if (brightness > 0.85) {
 		bloomColor = vec4(fragColor.rgb, 1);
 	}
 	else {

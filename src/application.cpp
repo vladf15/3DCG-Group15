@@ -106,7 +106,6 @@ public:
 
 		//buffers and textures for post-processing effects
         glGenFramebuffers(1, &sceneBuffer);
-		glGenFramebuffers(1, &postProcessingBuffer);
         glBindFramebuffer(GL_FRAMEBUFFER, sceneBuffer);
 		int windowWidth, windowHeight;
 		windowWidth = m_window.getWindowSize().x;
@@ -146,7 +145,7 @@ public:
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, windowWidth, windowHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepthTexture, 0);
 
-        glGenFramebuffers(1, &postProcessingBuffer);
+		glGenFramebuffers(1, &postProcessingBuffer);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 
@@ -231,6 +230,7 @@ public:
         glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, outputTexture);
         glBindVertexArray(postProcessingVAO);
+
         glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
         glBindVertexArray(0);
     }
@@ -597,23 +597,24 @@ public:
                     if (useBloom || useDoF) {
                         glBindFramebuffer(GL_FRAMEBUFFER, postProcessingBuffer);
 						//detaching postProcessingColorTexture1 from scene buffer and using it for post processing
-                        glClear(GL_COLOR_BUFFER_BIT);
                         if (useBloom) {
                             int windowWidth, windowHeight;
                             windowWidth = m_window.getWindowSize().x;
                             windowHeight = m_window.getWindowSize().y;
                             bool horizontal = true;
-                            bool finalPass = false;
+							bool finalPass = false;
+                            glActiveTexture(GL_TEXTURE6);
+                            glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
+                            glActiveTexture(GL_TEXTURE7);
+                            glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture1);
+                            glActiveTexture(GL_TEXTURE8);
+                            glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture2);
+                            
                             for (int i = 0; i < bloomPasses; i++) {
-                                glBindFramebuffer(GL_FRAMEBUFFER, postProcessingBuffer);
                                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postProcessingColorTexture2, 0);
                                 m_bloomShader.bind();
                                 glUniform1i(m_bloomShader.getUniformLocation("horizontal"), horizontal);
-                                glActiveTexture(GL_TEXTURE6);
-                                glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
                                 glUniform1i(m_bloomShader.getUniformLocation("sceneTexture"), 6);
-                                glActiveTexture(GL_TEXTURE7);
-                                glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture1);
                                 glUniform1i(m_bloomShader.getUniformLocation("bloomTexture"), 7);
                                 glUniform1i(m_bloomShader.getUniformLocation("width"), windowWidth);
                                 glUniform1i(m_bloomShader.getUniformLocation("height"), windowHeight);
@@ -629,11 +630,7 @@ public:
                                 m_bloomShader.bind();
 
                                 glUniform1i(m_bloomShader.getUniformLocation("horizontal"), horizontal);
-                                glActiveTexture(GL_TEXTURE6);
-                                glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
-                                glUniform1i(m_bloomShader.getUniformLocation("sceneTexture"), 6);
-                                glActiveTexture(GL_TEXTURE8);
-                                glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture2);
+                                glUniform1i(m_bloomShader.getUniformLocation("sceneTexture"), 6);                  
                                 glUniform1i(m_bloomShader.getUniformLocation("bloomTexture"), 8);
                                 glUniform1i(m_bloomShader.getUniformLocation("width"), windowWidth);
                                 glUniform1i(m_bloomShader.getUniformLocation("height"), windowHeight);
@@ -643,9 +640,11 @@ public:
                                 renderToTexture(postProcessingColorTexture1);
                             }
                         }
+                        
                         glBindFramebuffer(GL_FRAMEBUFFER, 0); // Bind back to default framebuffer
                         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear screen
                         renderToTexture(postProcessingColorTexture1);
+                     
                     }
                    break;
                 case 1:
@@ -932,7 +931,7 @@ private:
     Shader m_dofShader;
 	bool useBloom{ false };
 	bool useDoF{ false };
-    int bloomPasses{ 3 };
+    int bloomPasses{ 5 };
     int bloomRadius{ 5 };
     float bloomIntensity{ 0.1f };
     GLuint postProcessingVAO, postProcessingVBO;
