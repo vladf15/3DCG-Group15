@@ -681,7 +681,7 @@ public:
                         m_solarShader.bind();
                         glUniformMatrix4fv(m_solarShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvp));
                         glUniformMatrix3fv(m_solarShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(nModel));
-                        glUniform4f(m_solarShader.getUniformLocation("theColor"), 1.0f, 1.0f, 0.0f, 1.0f);
+                        glUniform4f(m_solarShader.getUniformLocation("theColor"), sun_color.x, sun_color.y, sun_color.z, 1.0f);
                         glUniform3f(m_solarShader.getUniformLocation("camPos"), cameraPos.x, cameraPos.y, cameraPos.z);
                         mesh.draw_no_mat(m_solarShader);
                         for (int i = 0; i < planets.size(); i++) {
