@@ -97,7 +97,76 @@ public:
             p.size = 0.4f;
 			particles.push_back(p);
 		}
-        
+        ///////////////////////
+		//POST-PROCESSING SETUP
+        ///////////////////////
+		//set up a framebuffer to capture the scene and then apply post-processing effects
+		//using the color and depth textures from the framebuffer
+        //inspiration for the method used: https://learnopengl.com/Advanced-Lighting/Bloom
+        //results rendered to a fullscreen quad
+        float postProcessingQuad[] = {
+            //positions       //texcoords
+            -1.0f,  1.0f,      0.0f, 1.0f,
+            -1.0f, -1.0f,      0.0f, 0.0f,
+             1.0f, -1.0f,      1.0f, 0.0f,
+             1.0f,  1.0f,      1.0f, 1.0f
+        };
+        glGenVertexArrays(1, &postProcessingVAO);
+        glGenBuffers(1, &postProcessingVBO);
+        glBindVertexArray(postProcessingVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, postProcessingVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(postProcessingQuad), postProcessingQuad, GL_STATIC_DRAW);
+
+        //positions
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        //texcoords
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+
+		//buffers and textures for post-processing effects
+        glGenFramebuffers(1, &sceneBuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, sceneBuffer);
+		int windowWidth, windowHeight;
+		windowWidth = m_window.getWindowSize().x;
+		windowHeight = m_window.getWindowSize().y;
+
+		glGenTextures(1, &sceneColorTexture);
+		glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, windowWidth, windowHeight, 0, GL_RGBA, GL_FLOAT, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneColorTexture, 0);
+
+        glGenTextures(1, &postProcessingColorTexture1);
+        glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, windowWidth, windowHeight, 0, GL_RGBA, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, postProcessingColorTexture1, 0);
+
+		GLuint attachments[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+        glDrawBuffers(2, attachments);
+
+        glGenTextures(1, &postProcessingColorTexture2);
+        glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture2);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, windowWidth, windowHeight, 0, GL_RGBA, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        glGenTextures(1, &sceneDepthTexture);
+		glBindTexture(GL_TEXTURE_2D, sceneDepthTexture);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, windowWidth, windowHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepthTexture, 0);
+
+		glGenFramebuffers(1, &postProcessingBuffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         //wang tiles initialization
         full_tileset.push_back(WangTile(0,  false,  false,  false,  false));
@@ -187,6 +256,17 @@ public:
             advancedBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/advanced_pbr_vert.glsl");
             advancedBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/advanced_pbr_frag.glsl");
             advancedPbrShader = advancedBuilder.build();
+
+			ShaderBuilder bloomBuilder;
+            bloomBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/blur_vert.glsl");
+            bloomBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/bloom_frag.glsl");
+            m_bloomShader = bloomBuilder.build();
+
+            ShaderBuilder dofBuilder;
+            dofBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/blur_vert.glsl");
+            dofBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/dof_frag.glsl");
+            m_dofShader = dofBuilder.build();
+
 
 
             // Any new shaders can be added below in similar fashion.
@@ -398,6 +478,13 @@ public:
         planets.push_back(Planet(pRadius, sun_size * 1.5f, t_init, p_init, spd, gen_rand_clr()));
     }
 
+    void renderToTexture() {
+        glBindVertexArray(postProcessingVAO);
+
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+        glBindVertexArray(0);
+    }
+
     void userInterface()
     {
         // Use ImGui for easy input/output of ints, floats, strings, etc...
@@ -442,8 +529,8 @@ public:
             // Button for clearing lights
             if (ImGui::Button("Reset Lights")) {
                 lightPositions.clear();
-                lightPositions.emplace_back(1.0f, 1.0f, 1.0f);
                 lightColors.clear();
+                lightPositions.emplace_back(1.0f, 1.0f, 1.0f);
                 lightColors.emplace_back(1.0f, 1.0f, 1.0f);
             }
 
@@ -471,6 +558,19 @@ public:
             case 0:
                 ImGui::TextWrapped("This is the first scene. You can use the '1', '2' and '3' keys to switch between camera modes.");
                 ImGui::Checkbox("Enable PBR", &usePbr);
+				ImGui::Checkbox("Use Bloom", &useBloom);
+				ImGui::Checkbox("Use Depth of Field", &useDoF);
+                ImGui::Checkbox("Show Particle Effects", &useParticles);
+                if (useBloom) {
+					ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.0f, 2.0f);
+					ImGui::SliderInt("Bloom Radius", &bloomRadius, 1.0f, 20.0f);
+                    ImGui::SliderInt("Bloom Passes", &bloomPasses, 1, 10);
+					ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 1.0f);
+                }
+				if (useDoF) {
+					ImGui::SliderFloat("DoF Focal Length", &focalLength, focalRange, 10.0f);
+					ImGui::SliderFloat("DoF Focal Range", &focalRange, 0.5f, focalLength);
+				}
                 if (usePbr) {
                     ImGui::Checkbox("Editable material parameters", &editableMaterial);
                     if (editableMaterial) {
@@ -622,8 +722,8 @@ public:
                     }
                 }
                 break;
-            
-            case 5: 
+
+            case 5:
                 ImGui::TextWrapped("Displaying PBR shading on a bread roll with normal mapping and ambient occlusion mapping");
                 ImGui::Checkbox("Use normal map", &useNormalMap);
                 ImGui::ColorEdit3("Specular color (albedo)", &albedo.x);
@@ -648,7 +748,6 @@ public:
 
         ImGui::End();
     }
-
     
 
     void update()
@@ -735,6 +834,10 @@ public:
 
             // Clear the screen
             glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+            //bind framebuffer to add post processing effects
+            if (useBloom || useDoF) {
+                glBindFramebuffer(GL_FRAMEBUFFER, sceneBuffer);
+            }
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             // ...
@@ -779,6 +882,8 @@ public:
                             glUniform1i(m_pbrShader.getUniformLocation("num_lights"), lightPositions.size());
                             glUniform3fv(m_pbrShader.getUniformLocation("lightPositions"), lightPositions.size(), glm::value_ptr(lightPositions[0]));
                             glUniform3fv(m_pbrShader.getUniformLocation("lightColors"), lightColors.size(), glm::value_ptr(lightColors[0]));
+                            // Bloom threshold
+							glUniform1f(m_pbrShader.getUniformLocation("bloomThreshold"), bloomThreshold);
 
                             glUniform1i(m_pbrShader.getUniformLocation("hasTexCoords"), static_cast<int>(mesh.hasTextureCoords()));
                             if (mesh.hasTextureCoords()) {
@@ -814,56 +919,137 @@ public:
                         }
                     }
 
-					//PARTICLE RENDERING
-                    glDepthFunc(GL_LESS);
-                    glDepthMask(GL_FALSE);
-                    glEnable(GL_BLEND);
-                    glEnable(GL_DEPTH_TEST);
-                    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-                    for (Particle& p : particles) {
-                        //animated texture on particles using a quad mesh
-                        //texture taken from:
-                        // https://unity.com/blog/engine-platform/free-vfx-image-sequences-flipbooks
-                        glm::mat4 particleModel = glm::mat4(1.0f);
-                        particleModel = glm::translate(particleModel, p.position);
-                        particleModel = glm::scale(particleModel, glm::vec3(p.size));
-						glm::vec3 directionToCamera = glm::normalize(p.position - cameraPos);
-						float angle = -atan2(directionToCamera.z, directionToCamera.x);
-						//rotate the particle around y axis to face the camera
-						const glm::mat4 particleModelMatrix = glm::rotate(particleModel, angle, glm::vec3(0.0f, 1.0f, 0.0f));
+                    ////////////////////
+                    //PARTICLE RENDERING
+                    ////////////////////
+                    if (useParticles) {
+                        glDepthFunc(GL_LESS);
+                        glDepthMask(GL_FALSE);
+                        glEnable(GL_BLEND);
+                        glEnable(GL_DEPTH_TEST);
+                        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+                        for (Particle& p : particles) {
+                            //animated texture on particles using a quad mesh
+                            //texture taken from:
+                            // https://unity.com/blog/engine-platform/free-vfx-image-sequences-flipbooks
+                            glm::mat4 particleModel = glm::mat4(1.0f);
+                            particleModel = glm::translate(particleModel, p.position);
+                            particleModel = glm::scale(particleModel, glm::vec3(p.size));
+                            glm::vec3 directionToCamera = glm::normalize(p.position - cameraPos);
+                            float angle = -atan2(directionToCamera.z, directionToCamera.x);
+                            //rotate the particle around y axis to face the camera
+                            const glm::mat4 particleModelMatrix = glm::rotate(particleModel, angle, glm::vec3(0.0f, 1.0f, 0.0f));
 
-                        const glm::mat4 particleMvp = m_projectionMatrix * m_viewMatrix * particleModelMatrix;
-                        const glm::mat3 particleNormalModelMatrix = glm::inverseTranspose(glm::mat3(particleModelMatrix));
-                        //fade out the particles as they despawn
-						float maxAlpha = glm::clamp(0.1f + 0.9f * p.life / 1.5f , 0.0f, 1.0f);
-                        for (GPUMesh& mesh : particle_mesh){
-                            m_animatedTextureShader.bind();
-                            glUniformMatrix4fv(m_animatedTextureShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(particleMvp));
-                            glUniformMatrix3fv(m_animatedTextureShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(particleNormalModelMatrix));
-                            particle_texture.bind(GL_TEXTURE5);
-                            glUniform1i(m_animatedTextureShader.getUniformLocation("tex"), 5);
-                            glUniform1i(m_animatedTextureShader.getUniformLocation("rows"), 4);
-                            glUniform1i(m_animatedTextureShader.getUniformLocation("columns"), 16);
-                            glUniform1f(m_animatedTextureShader.getUniformLocation("time"), glfwGetTime());
-                            glUniform1f(m_animatedTextureShader.getUniformLocation("maxAlpha"), maxAlpha);
-                            glUniform1f(m_animatedTextureShader.getUniformLocation("animationSpeed"), 40.0f);
-                            mesh.draw(m_animatedTextureShader);
-                        }
+                            const glm::mat4 particleMvp = m_projectionMatrix * m_viewMatrix * particleModelMatrix;
+                            const glm::mat3 particleNormalModelMatrix = glm::inverseTranspose(glm::mat3(particleModelMatrix));
+                            //fade out the particles as they despawn
+                            float maxAlpha = glm::clamp(0.1f + 0.9f * p.life / 1.5f, 0.0f, 1.0f);
+                            for (GPUMesh& mesh : particle_mesh) {
+                                m_animatedTextureShader.bind();
+                                glUniformMatrix4fv(m_animatedTextureShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(particleMvp));
+                                glUniformMatrix3fv(m_animatedTextureShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(particleNormalModelMatrix));
+                                particle_texture.bind(GL_TEXTURE5);
+                                glUniform1i(m_animatedTextureShader.getUniformLocation("tex"), 5);
+                                glUniform1i(m_animatedTextureShader.getUniformLocation("rows"), 4);
+                                glUniform1i(m_animatedTextureShader.getUniformLocation("columns"), 16);
+                                glUniform1f(m_animatedTextureShader.getUniformLocation("time"), glfwGetTime());
+                                glUniform1f(m_animatedTextureShader.getUniformLocation("maxAlpha"), maxAlpha);
+                                glUniform1f(m_animatedTextureShader.getUniformLocation("animationSpeed"), 40.0f);
+                                mesh.draw(m_animatedTextureShader);
+                            }
 
-						p.position += p.velocity;
-						p.size = glm::clamp(0.1f + 0.3f * p.life / 1.5f, 0.0f, 0.4f);
-                        p.life -= 0.01f;
-						//randomized velocity when spawning
-                        if (p.life <= 0.0f) {
-                            p.position = particleSource;
-                            p.velocity = 0.002f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
-                            p.life = 2.0f + 1.0f * (float)rand() / RAND_MAX;
-							p.size = 0.4f;
+                            p.position += p.velocity;
+                            p.size = glm::clamp(0.1f + 0.3f * p.life / 1.5f, 0.0f, 0.4f);
+                            p.life -= 0.01f;
+                            //randomized velocity when spawning
+                            if (p.life <= 0.0f) {
+                                p.position = particleSource;
+                                p.velocity = 0.002f * glm::vec3((float)rand() / RAND_MAX - 0.5f, 2 * (float)rand() / RAND_MAX, (float)rand() / RAND_MAX - 0.5f);
+                                p.life = 2.0f + 1.0f * (float)rand() / RAND_MAX;
+                                p.size = 0.4f;
+                            }
                         }
+                        glDisable(GL_BLEND);
+                        glDisable(GL_DEPTH_TEST);
+                        glDepthMask(GL_TRUE);
                     }
-                    glDisable(GL_BLEND);
-                    glDisable(GL_DEPTH_TEST);
-                    glDepthMask(GL_TRUE);
+
+					/////////////////////////
+					//POST-PROCESSING EFFECTS
+					/////////////////////////
+                    if (useBloom || useDoF) {
+                        glBindFramebuffer(GL_FRAMEBUFFER, postProcessingBuffer);
+                        int windowWidth, windowHeight;
+                        windowWidth = m_window.getWindowSize().x;
+                        windowHeight = m_window.getWindowSize().y;
+                        bool horizontal = true;
+                        bool finalPass = false;
+                        glActiveTexture(GL_TEXTURE6);
+                        glBindTexture(GL_TEXTURE_2D, sceneColorTexture);
+                        glActiveTexture(GL_TEXTURE7);
+                        glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture1);
+                        glActiveTexture(GL_TEXTURE8);
+                        glBindTexture(GL_TEXTURE_2D, postProcessingColorTexture2);
+                        if (useBloom){
+                            for (int i = 0; i < bloomPasses; i++) {
+
+                                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postProcessingColorTexture2, 0);
+                                m_bloomShader.bind();
+                                glUniform1i(m_bloomShader.getUniformLocation("horizontal"), horizontal);
+                                glUniform1i(m_bloomShader.getUniformLocation("sceneTexture"), 6);
+                                glUniform1i(m_bloomShader.getUniformLocation("bloomTexture"), 7);
+                                glUniform1i(m_bloomShader.getUniformLocation("width"), windowWidth);
+                                glUniform1i(m_bloomShader.getUniformLocation("height"), windowHeight);
+                                glUniform1i(m_bloomShader.getUniformLocation("bloomRadius"), bloomRadius);
+                                glUniform1f(m_bloomShader.getUniformLocation("bloomIntensity"), bloomIntensity);
+                                glUniform1i(m_bloomShader.getUniformLocation("finalPass"), finalPass);
+                                renderToTexture();
+                                horizontal = !horizontal;
+                                if (i == bloomPasses - 1) {
+                                    finalPass = true;
+                                }
+                                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postProcessingColorTexture1, 0);
+                                m_bloomShader.bind();
+
+                                glUniform1i(m_bloomShader.getUniformLocation("horizontal"), horizontal);
+                                glUniform1i(m_bloomShader.getUniformLocation("sceneTexture"), 6);
+                                glUniform1i(m_bloomShader.getUniformLocation("bloomTexture"), 8);
+                                glUniform1i(m_bloomShader.getUniformLocation("width"), windowWidth);
+                                glUniform1i(m_bloomShader.getUniformLocation("height"), windowHeight);
+                                glUniform1i(m_bloomShader.getUniformLocation("bloomRadius"), bloomRadius);
+                                glUniform1f(m_bloomShader.getUniformLocation("bloomIntensity"), bloomIntensity);
+                                glUniform1i(m_bloomShader.getUniformLocation("finalPass"), finalPass);
+							    renderToTexture();
+                                }
+                        }
+                        if (useDoF) {
+                            glActiveTexture(GL_TEXTURE9);
+                            glBindTexture(GL_TEXTURE_2D, sceneDepthTexture);
+                            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, postProcessingColorTexture2, 0);
+                            m_dofShader.bind();
+                            glUniform1i(m_dofShader.getUniformLocation("horizontal"), true);
+							if (useBloom) glUniform1i(m_dofShader.getUniformLocation("sceneTexture"), 7);
+							else glUniform1i(m_dofShader.getUniformLocation("sceneTexture"), 6);
+                            glUniform1i(m_dofShader.getUniformLocation("depthTexture"), 9);
+                            glUniform1i(m_dofShader.getUniformLocation("width"), windowWidth);
+                            glUniform1i(m_dofShader.getUniformLocation("height"), windowHeight);
+                            glUniform1f(m_dofShader.getUniformLocation("focalLength"), focalLength);
+                            glUniform1f(m_dofShader.getUniformLocation("focalRange"), focalRange);
+                            renderToTexture();
+                            m_dofShader.bind();
+                            glUniform1i(m_dofShader.getUniformLocation("horizontal"), false);
+                            glUniform1i(m_dofShader.getUniformLocation("sceneTexture"), 8);
+                            glUniform1i(m_dofShader.getUniformLocation("depthTexture"), 9);
+                            glUniform1i(m_dofShader.getUniformLocation("width"), windowWidth);
+                            glUniform1i(m_dofShader.getUniformLocation("height"), windowHeight);
+                            glUniform1f(m_dofShader.getUniformLocation("focalLength"), focalLength);
+                            glUniform1f(m_dofShader.getUniformLocation("focalRange"), focalRange);
+                        }
+
+                        glBindFramebuffer(GL_FRAMEBUFFER, 0); // Bind back to default framebuffer
+                        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear screen
+                        renderToTexture();
+                        }
                    break;
                 case 1:
                     glm::mat4 sun_model = glm::mat4(1.0f);
@@ -1150,7 +1336,7 @@ public:
                         }
                     }
                     break;
-                case 5: 
+                case 5:
                     for (GPUMesh& mesh : bread) {
                         advancedPbrShader.bind();
                         glUniformMatrix4fv(advancedPbrShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
@@ -1402,8 +1588,6 @@ private:
     Shader m_defaultShader;
     Shader m_shadowShader;
 
-	Shader m_animatedTextureShader;
-
     bool usePbr{ false };
     Shader m_pbrShader;
     Shader advancedPbrShader;
@@ -1455,6 +1639,7 @@ private:
     glm::mat4 m_modelMatrix{ 1.0f };
 
     //Animation variables
+    Shader m_animatedTextureShader;
     bool inAnimation{ false };
     int currentAnim = 0;
 	float animationTimer{ 0.0f };
@@ -1469,9 +1654,28 @@ private:
     Texture particle_texture;
 	int particle_num = 10;
 	glm::vec3 particleSource = glm::vec3(0.0f, 0.5f, 0.0f);
+	bool useParticles{ true };
     //glm::mat4 particleModelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.5f, 0.0f));
 
+    //Post processing variables for bloom and DoF
+    Shader m_bloomShader;
+    Shader m_dofShader;
+	bool useBloom{ false };
+	bool useDoF{ false };
+    int bloomPasses{ 5 };
+    int bloomRadius{ 5 };
+    float bloomIntensity{ 1.0f };
+	float bloomThreshold{ 1.0f };
 
+	float focalLength{ 2.0f };
+    float focalRange{ 1.0f };
+    GLuint postProcessingVAO, postProcessingVBO;
+	GLuint sceneBuffer; //original output
+	GLuint postProcessingBuffer; //extracted intense regions for bloom
+    GLuint sceneColorTexture; //resulting extracted scene colors
+    GLuint postProcessingColorTexture1; //ping pong textures
+    GLuint postProcessingColorTexture2;
+	GLuint sceneDepthTexture; //depth of scene for DoF
 
     //Camera variables
 	glm::vec3 cameraPos{ -1.0f, 1.0f, -1.0f };
