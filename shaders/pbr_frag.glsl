@@ -32,6 +32,7 @@ in vec3 fragNormal;
 in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 bloomColor;
 
 float pi = 3.1415926535;
 
@@ -85,5 +86,15 @@ void main()
         
         fragColor.rgb += (diffuseBRDF + specularBRDF) * lightIntensity * dot(normal, light);
     }
+
+    //extract bright areas for bloom
+    vec3 luminance = vec3(0.2126, 0.7152, 0.0722);
+	float brightness = dot(luminance, fragColor.rgb);
+	if (brightness > 1.0) {
+		bloomColor = vec4(fragColor.rgb, 1);
+	}
+	else {
+		bloomColor = vec4(0, 0, 0, 1);
+	}
     
 }
